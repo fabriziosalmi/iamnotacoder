@@ -1,0 +1,14 @@
+Below is a Python file. Analyze it for potential security vulnerabilities and suggest improvements. Focus on common issues like:
+
+- Input validation (e.g., preventing injection attacks).
+- Secure handling of sensitive data (e.g., passwords, API keys).
+- Use of secure libraries and functions (avoiding deprecated or vulnerable ones).
+- Proper error handling (avoiding information leakage).
+- OWASP Top 10
+
+If you identify any vulnerabilities, modify the code to mitigate them.  If you make changes, clearly explain the changes and the vulnerabilities they address in comments. If no vulnerabilities are identified or you are unable to modify, return the original code.
+Return ONLY the complete Python code.
+
+```python
+{code}
+```

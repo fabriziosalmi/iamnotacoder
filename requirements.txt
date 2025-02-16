@@ -1,0 +1,8 @@
+openai>=1.0.0  # Use a recent version, at least 1.0.0
+gitpython
+tomli  # For TOML parsing (toml is deprecated)
+click
+requests  # Explicitly include requests, as it's used by openai
+rich
+python-github  # For the GitHub API:
+toml

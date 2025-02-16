@@ -1,0 +1,5 @@
+Below is a Python file.  Ensure it adheres to PEP 8 style guidelines, add type hints where possible, and add any missing docstrings using Google style format. Do NOT change the functionality. Return ONLY the complete, modified Python code.
+
+```python
+{code}
+```

@@ -1,0 +1,14 @@
+Below is a Python file. Improve its maintainability by:
+
+- Adding clear and concise docstrings (Google style) where missing.
+- Adding type hints.
+- Improving variable names for clarity (if needed, but preserve functionality).
+- Adding comments to explain complex logic, *but do not over-comment*.
+- Refactoring overly complex functions/methods into smaller, more manageable units (if necessary and without changing behavior).
+- Do NOT change the existing functionality.
+
+Return ONLY the complete, modified Python code.
+
+```python
+{code}
+```

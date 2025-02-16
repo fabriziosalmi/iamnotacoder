@@ -1,0 +1,10 @@
+openai_api_key: "none"
+openai_api_base: "http://localhost:1234/v1"  # Per LM Studio, se applicabile
+llm_model: "stable-code-instruct-3b"
+llm_temperature: 0.5
+llm_optimization_level: "balanced"
+tools: "black,isort,pylint,flake8"
+exclude_tools: ""
+test_framework: "pytest"
+min_coverage: 80
+coverage_fail_action: "warn"
