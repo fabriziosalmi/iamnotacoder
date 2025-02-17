@@ -19,6 +19,7 @@ from typing import List, Dict, Tuple, Any, Optional
 import re
 import uuid
 import logging
+import difflib  # Import difflib
 
 console = Console()
 
@@ -267,6 +268,40 @@ def clean_llm_response(response_text: str) -> str:
             cleaned_lines.append(line)
     return "\n".join(cleaned_lines).strip()
 
+def get_llm_improvements_summary(original_code: str, improved_code: str, categories: List[str], client: OpenAI, llm_model:str, llm_temperature: float) -> Dict[str, List[str]]:
+    """Gets a summary of LLM improvements from the LLM itself, by category."""
+    diff = list(difflib.unified_diff(original_code.splitlines(), improved_code.splitlines(), lineterm=''))
+    diff_text = '\n'.join(diff)
+
+    improvements_summary = {}
+    for category in categories:
+        prompt = (
+            f"Review the following diff of a Python file and identify improvements made in the '{category}' category. "
+            f"Only list the specific improvements; do not include any introductory or concluding text.\n\n"
+            f"Diff:\n```diff\n{diff_text}\n```\n"
+            f"Improvements in the '{category}' category:"
+        )
+        try:
+            response = client.chat.completions.create(
+                model=llm_model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful coding assistant that summarizes code improvements."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=min(llm_temperature, 0.2),  # Lower temperature for concise summaries
+                max_tokens=512  # Limit response length
+            )
+            summary = response.choices[0].message.content.strip()
+            # Split into bullet points, handling different bullet styles
+            improvements = [line.strip("-*+ ").strip() for line in re.split(r'[\-\*\+] ', summary) if line.strip()]
+            improvements_summary[category] = improvements
+
+        except Exception as e:
+            console.print(f"[red]Error getting LLM improvements summary for {category}: {e}[/red]")
+            logging.exception("Error getting LLM improvements summary")
+            improvements_summary[category] = ["Error retrieving improvements."]
+
+    return improvements_summary
 def improve_file(file_path: str, client: OpenAI, llm_model: str, llm_temperature: float, categories: List[str], custom_prompt_dir: str, analysis_results: Dict[str, Dict[str, Any]], debug: bool = False, line_length: int = DEFAULT_LINE_LENGTH) -> Tuple[str, bool]:
     """Improves the file using LLM, with retries and syntax checking."""
     backup_path = create_backup(file_path)  # Create backup and store path
@@ -678,22 +713,34 @@ def create_info_file(file_path: str, analysis_results: Dict, test_results: Dict,
         else:
             f.write("  No tests performed.\n")
 
-def create_commit(repo: git.Repo, file_path: str, commit_message: str, test_results: Dict[str, Any] = None) -> None:
-    """Creates a Git commit, including test files if present."""
+def create_commit(repo: git.Repo, file_path: str, commit_message: str, test_results: Dict[str, Any] = None, llm_improvements_summary: Dict[str, List[str]] = None) -> None:
+    """Creates a Git commit, including test files if present and LLM improvement details."""
     try:
         console.print("[blue]Creating commit...[/blue]")
-        repo.git.add(file_path)  # Add the improved file
-        # Add the tests directory if it exists and tests were run
+        repo.git.add(file_path)
         if test_results is not None:
             tests_dir = os.path.join(repo.working_tree_dir, "tests")
             if os.path.exists(tests_dir):
                 repo.git.add(tests_dir)
-        repo.index.commit(commit_message)  # Create the commit
+
+        # Construct commit message with LLM improvement details
+        if llm_improvements_summary:
+            body = ""
+            for category, improvements in llm_improvements_summary.items():
+                if improvements and improvements != ["Error retrieving improvements."]:
+                    body += f"\n**{category.capitalize()} Improvements:**\n"
+                    for improvement in improvements:
+                        body += f"- {improvement}\n"
+            commit_message += "\n\n" + body.strip()
+
+        repo.index.commit(commit_message)
         console.print(f"[green]Commit created:[/green] {commit_message}")
     except Exception as e:
         console.print(f"[red]Error creating commit:[/red] {e}")
         logging.exception("Error creating commit")
-        exit(1)  # Exit on commit failure
+        exit(1)
+
+
 
 def create_pull_request(repo_url: str, token: str, base_branch: str, head_branch: str, commit_message: str, analysis_results: Dict[str, Dict[str, Any]], test_results: Dict[str, Any], file_path: str, optimization_level: str, test_framework: str, min_coverage: float, coverage_fail_action:str, repo_path: str, categories: List[str], debug: bool = False) -> None:
     """Creates a GitHub Pull Request."""
@@ -930,6 +977,12 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
     # --- Create and Save Info File ---
     create_info_file(file_path, final_analysis_results, test_results, llm_success, categories_list, llm_optimization_level, output_info, min_coverage)
 
+      # --- Get LLM Improvement Summary ---
+    llm_improvements_summary = {}
+    if llm_success:
+        llm_improvements_summary = get_llm_improvements_summary(original_code, improved_code, categories_list, client, llm_model, llm_temperature)
+
+
     # --- Commit and Pull Request (if not dry run) ---
     if not dry_run:
         console.print("[blue]Commit phase...[/blue]")
@@ -988,7 +1041,9 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
             final_commit_message += "\n\n" + "\n".join(body_lines)  # Add the body
         if commit_message:
             final_commit_message = commit_message # Use custom commit message if provided
-        create_commit(repo_obj, file_path, final_commit_message, test_results)  # Create commit
+
+        create_commit(repo_obj, file_path, final_commit_message, test_results, llm_improvements_summary)  # Create commit, Pass LLM summary
+
 
     # --- Push and Pull Request (if not dry run and not local commit) ---
 
