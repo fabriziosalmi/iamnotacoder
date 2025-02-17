@@ -2,4 +2,5 @@ test_fabgpt.py
 test_lmstudio.py
 commit_custom.txt
 report.txt
-__pycache__/
+__pycache__
+logs/
