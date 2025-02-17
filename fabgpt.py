@@ -953,7 +953,7 @@ def create_commit(
             with open(commit_custom_file, "r", encoding="utf-8") as cc:
                 custom_content = cc.read().strip()
             if custom_content:
-                commit_message = custom_content + "\n\n" + commit_message
+                commit_message = f"{custom_content}\n\n{commit_message}"
 
         # Construct the commit message body
         body = ""
