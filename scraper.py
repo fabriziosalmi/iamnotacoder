@@ -7,12 +7,42 @@ from datetime import datetime, timedelta
 from rich.console import Console
 from rich.progress import track
 from rich.table import Table
+from rich.progress import Progress
+import concurrent.futures
 
 # Initialize Rich console
 console = Console()
 
 # GitHub API base URL
 GITHUB_API_URL = "https://api.github.com"
+MAX_RETRIES = 3  # Maximum number of retries for API requests
+RETRY_DELAY = 5  # Seconds to wait between retries
+
+class GitHubAPIError(Exception):
+    """Custom exception for GitHub API errors."""
+    pass
+
+
+def make_github_request(url, headers, params=None, method="GET", data=None):
+    """Makes a request to the GitHub API with retries and error handling."""
+    for attempt in range(MAX_RETRIES):
+        try:
+            if method == "GET":
+                response = requests.get(url, headers=headers, params=params)
+            elif method == "POST":
+                response = requests.post(url, headers=headers, data=data)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+
+            response.raise_for_status()  # Raises HTTPError for bad requests (4xx or 5xx)
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            if attempt == MAX_RETRIES - 1:
+                raise GitHubAPIError(f"Failed to make request to {url} after {MAX_RETRIES} attempts: {e}") from e
+            console.print(f"[yellow]Request failed: {e}. Retrying in {RETRY_DELAY} seconds... (Attempt {attempt + 1}/{MAX_RETRIES})[/yellow]")
+            time.sleep(RETRY_DELAY)
+    return None # should never reach here, but for type hinting
+
 
 def search_repositories(token, max_repos):
     """Search for Python repositories with latest commit older than one year."""
@@ -24,66 +54,95 @@ def search_repositories(token, max_repos):
     page = 1
     per_page = 30  # Maximum items per page allowed by GitHub API
 
-    while len(repos) < max_repos:
-        remaining = max_repos - len(repos)
-        current_page_size = min(per_page, remaining)
+    with Progress(console=console) as progress:
+        task = progress.add_task("[cyan]Searching repositories...", total=max_repos)
+        while len(repos) < max_repos:
+            remaining = max_repos - len(repos)
+            current_page_size = min(per_page, remaining)
 
-        response = requests.get(
-            f"{GITHUB_API_URL}/search/repositories",
-            headers=headers,
-            params={"q": query, "sort": "updated", "order": "desc", "per_page": current_page_size, "page": page},
-        )
+            try:
+                data = make_github_request(
+                    f"{GITHUB_API_URL}/search/repositories",
+                    headers=headers,
+                    params={"q": query, "sort": "updated", "order": "desc", "per_page": current_page_size, "page": page},
+                )
 
-        if response.status_code != 200:
-            console.print(f"[red]Error:[/red] {response.status_code} - {response.json().get('message')}")
-            break
+                if "items" not in data or not data["items"]:
+                    break
 
-        data = response.json()
-        if "items" not in data or not data["items"]:
-            break
+                repos.extend(data["items"])
+                progress.update(task, advance=len(data["items"])) #update how many repos found.
+                page += 1
+                time.sleep(0.5)  # Add small delay to be gentle to the API
 
-        repos.extend(data["items"])
-        page += 1
-        time.sleep(1)  # To avoid hitting API rate limits
+            except GitHubAPIError as e:
+                console.print(f"[red]Error during repository search: {e}[/red]")
+                break # Stop searching if we get a non-retriable error.
+        progress.update(task, completed=len(repos))
 
     return repos[:max_repos]
 
-def find_python_files(token, repo_full_name, quality_threshold):
-    """Find Python files in the repository and evaluate their quality."""
-    headers = {"Authorization": f"token {token}"}
-    response = requests.get(f"{GITHUB_API_URL}/repos/{repo_full_name}/contents", headers=headers)
 
-    if response.status_code == 200:
-        files = response.json()
+def find_python_files(token, repo_full_name, quality_threshold):
+    """Find Python files in the repository and evaluate their quality.
+        Returns a list of tuples: (file_path, quality_score) for files meeting the criteria
+    """
+    headers = {"Authorization": f"token {token}"}
+    results = []
+
+    try:
+        files = make_github_request(f"{GITHUB_API_URL}/repos/{repo_full_name}/contents", headers=headers)
+        if not isinstance(files, list):
+            #Sometimes github returns a single file, not a list
+            return []
+
         for file in files:
             if file["type"] == "file" and file["name"].endswith(".py"):
                 # Perform quality check on the file
                 quality_score = evaluate_file_quality(token, repo_full_name, file["path"])
                 if quality_score <= quality_threshold:
-                    return file["path"], quality_score
+                    results.append((file["path"], quality_score))
 
-    return None, None
+    except GitHubAPIError as e:
+       console.print(f"[red]Error during file search in {repo_full_name}: {e}[/red]")  # Specific repo error
+
+    return results
+
 
 def evaluate_file_quality(token, repo_full_name, file_path):
     """Evaluate the quality of a Python file based on simple metrics."""
     headers = {"Authorization": f"token {token}"}
-    response = requests.get(f"{GITHUB_API_URL}/repos/{repo_full_name}/contents/{file_path}", headers=headers)
+    try:
+        file_data = make_github_request(f"{GITHUB_API_URL}/repos/{repo_full_name}/contents/{file_path}", headers=headers)
 
-    if response.status_code == 200:
-        file_content = response.json().get("content")
-        if file_content:
-            decoded_content = base64.b64decode(file_content).decode("utf-8")
+        if "content" in file_data:
+            decoded_content = base64.b64decode(file_data["content"]).decode("utf-8", errors="replace") #handle decode errors
             # Example quality metric: Line count
             lines = decoded_content.splitlines()
             quality_score = len(lines)  # Simple metric: total lines in the file
             return quality_score
 
+    except GitHubAPIError as e:
+        console.print(f"[red]Error during file quality evaluation for {repo_full_name}/{file_path}: {e}[/red]")
+
     return float("inf")  # Default to poor quality if file cannot be evaluated
+
 
 def create_unique_filename(base_name, max_repos, quality_threshold, extension):
     """Create a unique filename using the current timestamp."""
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M")
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")  # More precise timestamp
     return f"{timestamp}-{max_repos}repos-MaxQuality{quality_threshold}.{extension}"
+
+
+def process_repository(token, repo, quality_threshold):
+    """Process a single repository and return results."""
+    repo_name = repo["full_name"]
+    console.print(f"[green]Processing repository:[/green] {repo_name}")
+    results = []
+    python_files = find_python_files(token, repo_name, quality_threshold)
+    for file_path, quality_score in python_files:
+        results.append({"repo_url": repo["html_url"], "python_file": file_path, "quality_score": quality_score})
+    return results
 
 def main():
     parser = argparse.ArgumentParser(description="GitHub Python Repo Scraper")
@@ -103,19 +162,22 @@ def main():
     console.print(f"[cyan]Searching for up to {max_repos} Python repositories...[/cyan]")
     repos = search_repositories(token, max_repos)
 
-    results = []
-    for repo in track(repos, description="Processing repositories..."):
-        repo_name = repo["full_name"]
-        console.print(f"[green]Processing repository:[/green] {repo_name}")
+    all_results = []
 
-        python_file, quality_score = find_python_files(token, repo_name, quality_threshold)
-        if python_file:
-            results.append({"repo_url": repo["html_url"], "python_file": python_file, "quality_score": quality_score})
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:  # Use a ThreadPool for I/O-bound tasks
+        futures = [executor.submit(process_repository, token, repo, quality_threshold) for repo in repos]
+        for future in track(concurrent.futures.as_completed(futures), total=len(repos), description="Processing repositories..."):
+            try:
+                results = future.result()  # Get results from the completed future
+                all_results.extend(results)
+            except Exception as e:
+                console.print(f"[red]Error processing a repository: {e}[/red]")
 
     with open(output_file, "w") as f:
-        json.dump(results, f, indent=4)
+        json.dump(all_results, f, indent=4)
 
     console.print(f"[bold green]Results saved to {output_file}[/bold green]")
+
 
 if __name__ == "__main__":
     main()
