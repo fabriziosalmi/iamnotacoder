@@ -934,11 +934,11 @@ def create_info_file(
 def create_commit(
     repo: git.Repo,
     file_path: str,
-    commit_message: str,
+    commit_message: str,  # This is now the *complete* message from main
     test_results: Dict[str, Any] = None,
     llm_improvements_summary: Dict[str, List[str]] = None,
 ) -> None:
-    """Creates a Git commit, including test files if present and LLM improvement details."""
+    """Creates a Git commit."""
     try:
         console.print("[blue]Creating commit...[/blue]")
         repo.git.add(file_path)
@@ -947,7 +947,7 @@ def create_commit(
             if os.path.exists(tests_dir):
                 repo.git.add(tests_dir)
 
-        # Prepend custom commit message from commit_custom.txt if it exists.
+        # --- Prepend custom commit message (NOW we do this) ---
         commit_custom_file = os.path.join(repo.working_tree_dir, "commit_custom.txt")
         if os.path.exists(commit_custom_file):
             with open(commit_custom_file, "r", encoding="utf-8") as cc:
@@ -955,42 +955,12 @@ def create_commit(
             if custom_content:
                 commit_message = f"{custom_content}\n\n{commit_message}"
 
-        # Construct the commit message body
-        body = ""
-        # Define category icons
-        category_icons = {
-            "style": "🎨",
-            "maintenance": "🛠️",
-            "security": "🔒",
-            "performance": "⚡",
-            "testing": "🧪",
-            "refactor": "♻️",
-            "bugfix": "🐛",
-            "feature": "✨",
-            "static_analysis": "⚠️",  # Add this for static analysis section
-            "changes": "✨",          # Add this for changes section
-            "test_results": "🧪"     # Add this for test results section
-        }
+        repo.index.commit(commit_message)  # Commit the *complete* message
 
-        if llm_improvements_summary:
-            for category, improvements in llm_improvements_summary.items():
-                if improvements and improvements != ["Error retrieving improvements."]:
-                    # Get the icon for the category, default to "✨" if not found
-                    icon = category_icons.get(category.lower(), "✨")
-                    body += f"\n{icon} **{category.capitalize()} Improvements:**\n"
-                    for improvement in improvements:
-                        body += f"- {improvement}\n"
-
-        if body:
-            commit_message += "\n\n" + body.strip()
-
-
-        repo.index.commit(commit_message)
     except Exception as e:
         console.print(f"[red]Error creating commit:[/red] {e}")
         logging.exception("Error creating commit")
         exit(1)
-
 
 
 def create_pull_request(
@@ -1399,12 +1369,12 @@ def main(
 
         # --- Determine the main type based on what happened ---
         if "bugfix" in categories_list and llm_success:  # Prioritize bugfix
-             commit_type = "fix"
-        elif "feature" in categories_list and llm_success: # then feature
+            commit_type = "fix"
+        elif "feature" in categories_list and llm_success:  # then feature
             commit_type = "feat"
         # if there are test generated/updated, add test as part of the type
         if tests_generated:
-             commit_type = f"{commit_type}, test"
+            commit_type = f"{commit_type}, test"
         # Add the commit type and scope.
         commit_message_parts.append(f"{commit_type}({base_name}):")
 
@@ -1413,10 +1383,16 @@ def main(
         if not llm_success:
             summary += " (LLM improvements failed)"
         commit_message_parts.append(summary)
+        commit_message_parts.append("") # Add a blank line after the summary
+
 
         # --- Changes Made ---
         body_lines = []
         changes_made = []
+
+        changes_made.append("Hi there! 👋 fab minor improvements applied in PR, You can reach me [here](https://github.com/fabriziosalmi) any time ^_^")
+        changes_made.append("Here's the improvements list made to the python script:")
+        changes_made.append("")
 
         if shutil.which("black"):
             changes_made.append("Formatted with Black")
@@ -1429,9 +1405,6 @@ def main(
         if tests_generated:
             changes_made.append("Generated/updated tests")
 
-        # Add a blank line before the body *only if there's content*
-        if changes_made or analysis_diff or test_results or llm_improvements_summary:
-            body_lines.append("")
 
         if changes_made:
             body_lines.append("✨ **Changes Made:**")
@@ -1488,22 +1461,23 @@ def main(
                             body_lines.append(f"- {improvement}")
                     body_lines.append("")  # Add empty line after each category section
             # Add empty line after all LLM improvements (if any were added)
-            if any(improvements and improvements != ["Error retrieving improvements."] 
-                  for improvements in llm_improvements_summary.values()):
+            if any(improvements and improvements != ["Error retrieving improvements."]
+                for improvements in llm_improvements_summary.values()):
                 body_lines.append("")
 
+        commit_message_parts.extend(body_lines)
 
-        if body_lines:
-            commit_message_parts.extend(body_lines)
-
-        final_commit_message = "\n".join(commit_message_parts)
-        if commit_message:
+        # --- Combine into the *final* message ---
+        if commit_message:  # If a CLI commit message is provided, use it *instead*
             final_commit_message = commit_message
+        else:
+            final_commit_message = "\n".join(commit_message_parts) # Use dynamically built
+
 
         create_commit(
             repo_obj,
             file_path,
-            final_commit_message,
+            final_commit_message,  # Pass the *complete* message
             test_results,
             llm_improvements_summary,
         )
@@ -1606,6 +1580,9 @@ def main(
     # --- Cleanup ---
     if not debug:
         shutil.rmtree(temp_dir)  # Clean up the temporary directory
+
+    console.print("[green]All operations completed successfully.[/green]")
+    exit(0)
 
 
 if __name__ == "__main__":
