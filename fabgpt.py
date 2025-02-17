@@ -1065,6 +1065,9 @@ def main(
     checkout_branch(repo_obj, branch) # Checkout target branch first
     checkout_branch(repo_obj, new_branch_name) # Then new improvement branch
 
+    # Initialize final_analysis_results to avoid UnboundLocalError if not set in the loop.
+    final_analysis_results = {}
+
     for file in files_list:
         file_path = os.path.join(temp_dir, file)
         original_code = "" # Capture original code per file
