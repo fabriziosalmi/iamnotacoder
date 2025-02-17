@@ -6,6 +6,9 @@
 
 FabGPT is a command-line tool designed to automatically improve the quality of Python code within GitHub repositories. It leverages static analysis tools, Large Language Models (LLMs), and automated testing to enhance code style, maintainability, security, and performance.  FabGPT can operate on individual files or process multiple files from a JSON list, making it suitable for both targeted improvements and broader code quality initiatives.  It integrates seamlessly with GitHub, offering both local commit and pull request creation capabilities, and it fully supports forking for a non-destructive workflow.
 
+> [!NOTE] 
+> :baby: First run and [merged PR](https://github.com/mitchellggreenhalgh/mid-distance-db/pull/3#issuecomment-2663849733).
+
 ## Features
 
 *   **Automated Code Improvement:**  Uses LLMs to suggest and apply improvements in various categories (style, maintainability, security, performance).  Provides a robust retry mechanism and handles diverse LLM response formats.
