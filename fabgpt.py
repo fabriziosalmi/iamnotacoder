@@ -1,4 +1,3 @@
-import uuid  # Add this import at the top of your file
 import git
 import os
 import tempfile
@@ -17,23 +16,23 @@ import hashlib
 import time
 import ast
 from typing import List, Dict, Tuple, Any
-import re  # Import the regular expression module
+import re
+import uuid
 
 console = Console()
 
 # Constants
-DEFAULT_LLM_MODEL = "qwen2.5-coder-7b-instruct"  # Or your preferred model
-DEFAULT_LLM_TEMPERATURE = 0.2  # Lower temperature for more deterministic output
-MAX_SYNTAX_RETRIES = 5  # Increased retry count
+DEFAULT_LLM_MODEL = "qwen2.5-coder-7b-instruct"
+DEFAULT_LLM_TEMPERATURE = 0.2
+MAX_SYNTAX_RETRIES = 5
 MAX_LLM_RETRIES = 3
 OPENAI_TIMEOUT = 120.0
-
+MAX_PUSH_RETRIES = 3  # Maximum number of times to retry pushing
 
 def run_command(command: List[str], cwd: str = None) -> Tuple[str, str, int]:
-    """Executes a shell command and returns stdout, stderr, and return code."""
+    # (No changes)
     try:
         start_time = time.time()
-        # Safer: Use shell=False and pass arguments as a list.
         result = subprocess.run(
             command, capture_output=True, text=True, cwd=cwd, check=True
         )
@@ -42,7 +41,7 @@ def run_command(command: List[str], cwd: str = None) -> Tuple[str, str, int]:
         return result.stdout, result.stderr, result.returncode
     except subprocess.CalledProcessError as e:
         return e.stdout, e.stderr, e.returncode
-    except FileNotFoundError as e:  # Catch FileNotFoundError specifically
+    except FileNotFoundError as e:
         console.print(f"[red]Command not found:[/red] {e}")
         return "", str(e), 1
     except Exception as e:
@@ -50,7 +49,7 @@ def run_command(command: List[str], cwd: str = None) -> Tuple[str, str, int]:
         return "", str(e), 1
 
 def load_config(config_file: str) -> dict:
-    """Loads configuration from a TOML file."""
+    # (No changes)
     try:
         with open(config_file, "r") as f:
             return toml.load(f)
@@ -59,7 +58,7 @@ def load_config(config_file: str) -> dict:
         exit(1)
 
 def create_backup(file_path: str) -> str:
-    """Creates a backup copy of the file, with timestamp."""
+    # (No changes)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = f"{file_path}.bak.{timestamp}"
     try:
@@ -71,7 +70,7 @@ def create_backup(file_path: str) -> str:
         return None
 
 def restore_backup(file_path: str, backup_path: str) -> None:
-    """Restores the file from the backup copy."""
+    # (No changes)
     try:
         shutil.copy2(backup_path, file_path)
         console.print(f"[green]File restored from:[/green] {backup_path}")
@@ -79,30 +78,25 @@ def restore_backup(file_path: str, backup_path: str) -> None:
         console.print(f"[red]Error restoring backup:[/red] {e}")
 
 def get_inputs(ctx: click.Context, param: click.Parameter, value: Any) -> dict:
-    """Handles inputs: CLI > config file > defaults."""
+    # (No changes)
     config = {}
     if ctx.default_map:
         config.update(ctx.default_map)
-
     if value:
         config.update(load_config(value))
-
     for k, v in ctx.params.items():
         if v is not None:
             config[k] = v
-
     ctx.default_map = config
     return config
 
 def clone_repository(repo_url: str, token: str) -> Tuple[git.Repo, str]:
-    """Clones the repository (shallow clone) into a temporary directory."""
+    # (No changes)
     temp_dir = tempfile.mkdtemp()
     auth_repo_url = repo_url.replace("https://", f"https://{token}@")
-
     try:
         console.print(f"[blue]Cloning repository (shallow): {repo_url}[/blue]")
         start_time = time.time()
-        # Use depth=1 for shallow clone
         repo = git.Repo.clone_from(auth_repo_url, temp_dir, depth=1)
         end_time = time.time()
         console.print(f"[green]Repository cloned to:[/green] {temp_dir} in {end_time - start_time:.2f} seconds")
@@ -112,34 +106,33 @@ def clone_repository(repo_url: str, token: str) -> Tuple[git.Repo, str]:
         exit(1)
 
 def checkout_branch(repo: git.Repo, branch_name: str) -> None:
-     """Checks out the specified branch, fetching and pruning updates first."""
-     try:
-         console.print(f"[blue]Checking out branch: {branch_name}[/blue]")
-         start_time = time.time()
-         repo.git.fetch("--all", "--prune")  # Fetch and prune all remotes.  THIS IS KEY.
-         repo.git.checkout(branch_name)
-         end_time = time.time()
-         console.print(f"[green]Checked out branch:[/green] {branch_name} in {end_time - start_time:.2f} seconds")
-     except git.exc.GitCommandError:
+    # (No changes)
+    try:
+        console.print(f"[blue]Checking out branch: {branch_name}[/blue]")
+        start_time = time.time()
+        repo.git.fetch("--all", "--prune")
+        repo.git.checkout(branch_name)
+        end_time = time.time()
+        console.print(f"[green]Checked out branch:[/green] {branch_name} in {end_time - start_time:.2f} seconds")
+    except git.exc.GitCommandError:
         try:
             console.print(f"[yellow]Attempting to fetch branch {branch_name}[/yellow]")
             start_time = time.time()
             repo.git.fetch("origin", branch_name)
-            repo.git.checkout(f"origin/{branch_name}")  # Checkout remote branch
+            repo.git.checkout(f"origin/{branch_name}")
             end_time = time.time()
             console.print(f"[green]Checked out branch:[/green] {branch_name} in {end_time - start_time:.2f} seconds")
         except git.exc.GitCommandError as e:
             console.print(f"[red]Error checking out branch:[/red] {e}")
             exit(1)
 
+
 def create_branch(repo: git.Repo, file_name: str, file_purpose: str = "") -> str:
-    """Creates a new branch with a highly unique name."""
+    # (No changes)
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     sanitized_file_name = "".join(c if c.isalnum() else "_" for c in file_name)
-    # Use a UUID to make the branch name virtually guaranteed to be unique
-    unique_id = uuid.uuid4().hex  # Generate a UUID and get its hex representation
-    branch_name = f"improvement-{sanitized_file_name}-{file_purpose}-{timestamp}-{unique_id}" #Added UUID
-
+    unique_id = uuid.uuid4().hex
+    branch_name = f"improvement-{sanitized_file_name}-{file_purpose}-{timestamp}-{unique_id}"
     try:
         console.print(f"[blue]Creating branch: {branch_name}[/blue]")
         start_time = time.time()
@@ -152,9 +145,8 @@ def create_branch(repo: git.Repo, file_name: str, file_purpose: str = "") -> str
         exit(1)
 
 def get_file_purpose(file_path: str) -> str:
-    """Attempts to determine the file's purpose (for branch naming)."""
+    # (No changes)
     try:
-        # This is a very basic heuristic.  More sophisticated methods could be used.
         with open(file_path, "r") as f:
             first_line = f.readline()
             if "def " in first_line:
@@ -167,7 +159,7 @@ def get_file_purpose(file_path: str) -> str:
         return ""
 
 def analyze_project(repo_path: str, file_path: str, tools: List[str], exclude_tools: List[str], cache_dir: str = None, debug: bool = False) -> Dict[str, Dict[str, Any]]:
-    """Performs static analysis, handling caching and tool availability."""
+ # (No changes)
     cache_key_data = f"{file_path}-{','.join(sorted(tools))}-{','.join(sorted(exclude_tools))}".encode('utf-8')
     cache_key = hashlib.sha256(cache_key_data).hexdigest()
     cache_file = os.path.join(cache_dir, f"{cache_key}.json") if cache_dir else None
@@ -197,7 +189,6 @@ def analyze_project(repo_path: str, file_path: str, tools: List[str], exclude_to
                 progress.update(analysis_task, advance=1)
                 continue
 
-            # Check if the tool is installed.
             if shutil.which(tool) is None:
                 console.print(f"[yellow]Tool not found: {tool}. Skipping.[/yellow]")
                 progress.update(analysis_task, advance=1)
@@ -237,52 +228,37 @@ def analyze_project(repo_path: str, file_path: str, tools: List[str], exclude_to
     return results
 
 def clean_llm_response(response_text: str) -> str:
-    """Removes extraneous text and code fences from LLM responses."""
-
-    # First, try to extract content within code blocks (```python ... ```)
+    # (No changes)
     code_blocks = re.findall(r"```(?:python)?\n(.*?)\n```", response_text, re.DOTALL)
     if code_blocks:
-        # Use the *last* full code block (heuristic: often better)
         return code_blocks[-1].strip()
-
-    # If no code blocks found, fall back to line-based cleaning
     lines = response_text.splitlines()
     cleaned_lines = []
-    started = False  # Flag to indicate we've found the start of code
-
+    started = False
     for line in lines:
         line = line.strip()
-        # Start accumulating lines when a valid Python statement is found
         if not started:
-            if (
-                line.startswith("import ")
-                or line.startswith("def ")
-                or line.startswith("class ")
-                or (line and not line.startswith("#") and not line[0].isspace())  # Heuristic for code
-            ):
+            if (line.startswith("import ") or line.startswith("def ") or
+                    line.startswith("class ") or (line and not line.startswith("#") and not line[0].isspace())):
                 started = True
         if started:
-             # Stop if we hit something that's clearly not code.
-            if line.lower().startswith("return only the"):  # Common LLM phrase.
+            if line.lower().startswith("return only the"):
                 break
             cleaned_lines.append(line)
-
     return "\n".join(cleaned_lines).strip()
 
 def improve_file(file_path: str, client: OpenAI, llm_model: str, llm_temperature: float, categories: List[str], custom_prompt_dir: str, analysis_results: Dict[str, Dict[str, Any]], debug: bool = False) -> Tuple[str, bool]:
-    """Improves the file using the LLM, iteratively by category."""
+   # (No changes)
     backup_path = create_backup(file_path)
     if not backup_path:
         console.print("[red]Failed to create backup. Aborting.[/red]")
         exit(1)
 
-    # Check and run black/isort only if they are installed
     if shutil.which("black"):
         console.print(f"[blue]Formatting with Black...[/blue]")
         run_command(["black", file_path], cwd=os.path.dirname(file_path))
     else:
         console.print("[yellow]Black not found, skipping formatting.[/yellow]")
-
     if shutil.which("isort"):
         console.print(f"[blue]Formatting with Isort...[/blue]")
         run_command(["isort", file_path], cwd=os.path.dirname(file_path))
@@ -293,7 +269,7 @@ def improve_file(file_path: str, client: OpenAI, llm_model: str, llm_temperature
     with open(file_path, "r") as f:
         improved_code = f.read()
 
-    total_success = True  # Track overall success
+    total_success = True
     with Progress(
         "[progress.description]{task.description}",
         "•",
@@ -312,7 +288,6 @@ def improve_file(file_path: str, client: OpenAI, llm_model: str, llm_temperature
             try:
                 with open(prompt_file, "r") as f:
                     prompt_template = f.read()
-                    # More specific prompt instructions.
                     prompt = prompt_template.replace("{code}", improved_code)
                     prompt += "\nReturn only the corrected code, without any introductory or concluding text. Do not include markdown code fences (```)."
             except Exception as e:
@@ -340,27 +315,23 @@ def improve_file(file_path: str, client: OpenAI, llm_model: str, llm_temperature
                     console.print(f"[cyan]LLM request for {category} (attempt {attempt + 1}) took {end_time - start_time:.2f} seconds.[/cyan]")
 
                     improved_code = response.choices[0].message.content.strip()
-                    improved_code = clean_llm_response(improved_code) # Clean the llm response
+                    improved_code = clean_llm_response(improved_code)
 
-
-                    # Inline syntax correction (similar to test generation)
                     syntax_errors = 0
                     while syntax_errors < MAX_SYNTAX_RETRIES:
                         try:
                             ast.parse(improved_code)
-                            break  # No syntax errors
+                            break
                         except SyntaxError as e:
                             console.print(f"[yellow]Syntax error in generated code (attempt {syntax_errors + 1}), retrying...[/yellow]")
                             line_number = e.lineno
                             error_message = str(e)
 
-                            # Get code context
                             code_lines = improved_code.splitlines()
-                            start_line = max(0, line_number - 3)  # 2 lines before
-                            end_line = min(len(code_lines), line_number + 2)  # 2 lines after
+                            start_line = max(0, line_number - 3)
+                            end_line = min(len(code_lines), line_number + 2)
                             context = "\n".join(code_lines[start_line:end_line])
 
-                            # Highlight the error line
                             highlighted_context = context.replace(code_lines[line_number -1], f"#> {code_lines[line_number - 1]}")
 
                             syntax_prompt = (
@@ -379,37 +350,36 @@ def improve_file(file_path: str, client: OpenAI, llm_model: str, llm_temperature
                                         {"role": "system", "content": "You are a helpful coding assistant that improves code quality."},
                                         {"role": "user", "content": syntax_prompt}
                                     ],
-                                    temperature=min(llm_temperature, 0.2),  # Lower temp for syntax correction
+                                    temperature=min(llm_temperature, 0.2),
                                     max_tokens=4096
                                 )
                                 end_time = time.time()
                                 console.print(f"[cyan]LLM retry for syntax correction (attempt {syntax_errors}) took {end_time - start_time:.2f} seconds.[/cyan]")
                                 improved_code = response.choices[0].message.content.strip()
-                                improved_code = clean_llm_response(improved_code) # Clean the llm response
+                                improved_code = clean_llm_response(improved_code)
                             except Timeout:
                                 console.print(f"[yellow]Timeout during syntax correction attempt {syntax_errors}.[/yellow]")
                                 if syntax_errors == MAX_SYNTAX_RETRIES:
                                      console.print(f"[red]Max syntax correction attempts reached for {category}. Skipping.[/red]")
-                                     break #exit inner loop
-                                continue # retry
+                                     break
+                                continue
                     if syntax_errors == MAX_SYNTAX_RETRIES:
                         console.print(f"[red]Max syntax correction attempts reached for {category}. Skipping.[/red]")
-                        break # exit inner loop
+                        break
 
                     with open(file_path, "w") as f:
                         f.write(improved_code)
                     success = True
-                    break  # Exit the attempt loop if successful
+                    break
 
                 except Timeout:
                     console.print(f"[yellow]Timeout during LLM call for {category} (attempt {attempt + 1}).[/yellow]")
                     if attempt < MAX_LLM_RETRIES - 1:
-                        time.sleep(2)  # Wait before retrying
+                        time.sleep(2)
                     else:
                         console.print(f"[red]Max LLM retries reached for {category}.[/red]")
                         success = False
                         break
-
                 except Exception as e:
                     console.print(f"[red]Error during LLM call for {category} (attempt {attempt + 1}): {e}[/red]")
                     if attempt < MAX_LLM_RETRIES - 1:
@@ -422,41 +392,36 @@ def improve_file(file_path: str, client: OpenAI, llm_model: str, llm_temperature
             if not success:
                 restore_backup(file_path, backup_path)
                 console.print(f"[yellow]Restoring backup due to failure in {category} improvements.[/yellow]")
-                total_success = False # Update overall success
+                total_success = False
             progress.update(improve_task, advance=1)
 
     return improved_code, total_success
 
 def fix_tests(generated_tests: str, file_base_name: str) -> Tuple[str, bool]:
-    """Analyzes generated test code and creates a corrective prompt if needed."""
+    # (No changes)
     try:
         ast.parse(generated_tests)
-        return generated_tests, False  # No errors
+        return generated_tests, False
     except SyntaxError as e:
         console.print(f"[yellow]Syntax error in test generation: {e}[/yellow]")
-         # Get more specific error information
         line_number = e.lineno
         error_message = str(e)
 
-        # Get code context
         code_lines = generated_tests.splitlines()
-        start_line = max(0, line_number - 3)  # 2 lines before
-        end_line = min(len(code_lines), line_number + 2)  # 2 lines after
+        start_line = max(0, line_number - 3)
+        end_line = min(len(code_lines), line_number + 2)
         context = "\n".join(code_lines[start_line:end_line])
-        # Highlight error line
         highlighted_context = context.replace(code_lines[line_number-1], f"#>>> {code_lines[line_number-1]}")
 
-
-        # Include line number in the error message
         error_message_with_line = (
             f"Syntax error in generated tests for {file_base_name}.py on line {line_number}: {error_message}.  "
             f"Please fix the following code:\n```python\n{highlighted_context}\n```\n\n"
             "Return only the corrected code, without any introductory or concluding text. Do not include markdown code fences."
             )
-        return error_message_with_line, True  # Return error message and True for had_errors
+        return error_message_with_line, True
 
 def generate_tests(file_path: str, client: OpenAI, llm_model: str, llm_temperature: float, test_framework: str, custom_prompt_dir: str, debug: bool = False) -> str:
-    """Generates tests using the LLM and attempts to fix syntax errors."""
+    # (No changes)
     with open(file_path, "r") as f:
         code = f.read()
 
@@ -465,7 +430,7 @@ def generate_tests(file_path: str, client: OpenAI, llm_model: str, llm_temperatu
     prompt_file = os.path.join(custom_prompt_dir, "prompt_tests.txt")
     if not os.path.exists(prompt_file):
         console.print(f"[red]Prompt file for tests not found: {prompt_file}.[/red]")
-        return ""  # Return empty string if prompt file is missing
+        return ""
     try:
         with open(prompt_file, 'r') as f:
             prompt_template = f.read()
@@ -478,7 +443,6 @@ def generate_tests(file_path: str, client: OpenAI, llm_model: str, llm_temperatu
     if debug:
         console.print(f"[debug]LLM prompt for test generation:\n{prompt}")
 
-    # LLM interaction
     try:
         start_time = time.time()
         response = client.chat.completions.create(
@@ -488,39 +452,34 @@ def generate_tests(file_path: str, client: OpenAI, llm_model: str, llm_temperatu
                 {"role": "user", "content": prompt}
             ],
             temperature=llm_temperature,
-            max_tokens=4096  # Adjust as needed
+            max_tokens=4096
         )
         end_time = time.time()
         console.print(f"[cyan]LLM request for test generation took {end_time - start_time:.2f} seconds.[/cyan]")
         generated_tests = response.choices[0].message.content.strip()
-        generated_tests = clean_llm_response(generated_tests)  # Clean LLM response
+        generated_tests = clean_llm_response(generated_tests)
 
-
-        # Use fix_tests to handle syntax errors
         fixed_tests, had_errors = fix_tests(generated_tests, file_base_name)
 
         syntax_errors = 0
         while had_errors and syntax_errors < MAX_SYNTAX_RETRIES:
             console.print("[yellow]Attempting to fix syntax errors in generated tests...[/yellow]")
-            # Retry with a corrective prompt
             start_time = time.time()
-            # Use the detailed error message from fix_tests
             error_message = fixed_tests
-
             try:
                 response = client.chat.completions.create(
                         model=llm_model,
                         messages=[
                             {"role": "system", "content": "You are a helpful coding assistant that generates tests. Fix the following code that has syntax errors."},
-                            {"role": "user", "content": error_message}  # Use the detailed error message
+                            {"role": "user", "content": error_message}
                         ],
-                        temperature=min(llm_temperature, 0.2),  # Lower temp for corrections
+                        temperature=min(llm_temperature, 0.2),
                         max_tokens=4096
                 )
                 end_time = time.time()
                 console.print(f"[cyan]LLM retry for test generation (attempt {syntax_errors + 1}) took {end_time - start_time:.2f} seconds.[/cyan]")
                 generated_tests = response.choices[0].message.content.strip()
-                generated_tests = clean_llm_response(generated_tests) # Clean the llm response
+                generated_tests = clean_llm_response(generated_tests)
                 fixed_tests, had_errors = fix_tests(generated_tests, file_base_name)
                 syntax_errors += 1
             except Timeout:
@@ -528,7 +487,7 @@ def generate_tests(file_path: str, client: OpenAI, llm_model: str, llm_temperatu
                 if syntax_errors == MAX_SYNTAX_RETRIES:
                     console.print(f"[red]Max syntax retries reached for test generation. Skipping.[/red]")
                     return ""
-                continue # retry
+                continue
 
         if had_errors:
             console.print(f"[red]Max syntax retries reached for test generation. Skipping.[/red]")
@@ -538,20 +497,17 @@ def generate_tests(file_path: str, client: OpenAI, llm_model: str, llm_temperatu
     except Timeout:
         console.print(f"[yellow]Timeout during initial LLM call for test generation.[/yellow]")
         return ""
-
     except Exception as e:
         console.print(f"[red]Error during LLM call for test generation: {e}[/red]")
         return ""
-
 
     tests_dir = os.path.join(os.path.dirname(file_path), "..", "tests")
     os.makedirs(tests_dir, exist_ok=True)
     test_file_name = "test_" + os.path.basename(file_path)
     test_file_path = os.path.join(tests_dir, test_file_name)
-    if debug: # only print if debug is enabled
+    if debug:
         print(f"[DEBUG] Test file path: {test_file_path}")
 
-    # Check if test file already exists
     if os.path.exists(test_file_path):
         console.print(f"[yellow]Test file already exists: {test_file_path}. Skipping writing.[/yellow]")
         return ""
@@ -560,7 +516,7 @@ def generate_tests(file_path: str, client: OpenAI, llm_model: str, llm_temperatu
         with open(test_file_path, "w", encoding="utf-8") as f:
             f.write(generated_tests)
         console.print(f"[green]Test file written to: {test_file_path}[/green]")
-        if debug:  # only print if debug mode is enabled
+        if debug:
             print(f"[DEBUG] Test file exists after write: {os.path.exists(test_file_path)}")
         return generated_tests
     except Exception as e:
@@ -569,29 +525,24 @@ def generate_tests(file_path: str, client: OpenAI, llm_model: str, llm_temperatu
         return ""
 
 def run_tests(repo_path: str, original_file_path: str, test_framework: str, min_coverage: float, coverage_fail_action: str, debug: bool = False) -> Dict[str, Any]:
-    """Runs tests, measures coverage (optional), and handles results."""
+    """Runs tests (no changes)."""
     test_results = {}
-    tests_dir = os.path.join(repo_path, "tests")  # Construct the tests directory path
+    tests_dir = os.path.join(repo_path, "tests")
 
     if not os.path.exists(tests_dir):
         console.print(f"[yellow]Tests directory not found: {tests_dir}[/yellow]")
         return {"output": "", "errors": "Tests directory not found", "returncode": 5}
 
-
     if test_framework == "pytest":
-        # Construct the tests directory path
-
-        command = ["pytest", "-v", tests_dir]  # Pass the tests directory to pytest
+        command = ["pytest", "-v", tests_dir]
         if min_coverage is not None:
-            # Get relative path from repo root to the *directory* containing the file
             rel_path = os.path.relpath(os.path.dirname(original_file_path), repo_path)
             command.extend([f"--cov={rel_path}", "--cov-report", "term-missing"])
 
-
         if debug:
             print(f"[DEBUG] Current working directory in run_tests: {repo_path}")
-            print(f"[DEBUG] Test command: {' '.join(command)}") # Debug print
-        stdout, stderr, returncode = run_command(command, cwd=repo_path)  # cwd is correct
+            print(f"[DEBUG] Test command: {' '.join(command)}")
+        stdout, stderr, returncode = run_command(command, cwd=repo_path)
         test_results = {
             "output": stdout,
             "errors": stderr,
@@ -613,9 +564,69 @@ def run_tests(repo_path: str, original_file_path: str, test_framework: str, min_
     else:
         console.print(f"[yellow]Unsupported test framework: {test_framework}[/yellow]")
         return {"output": "", "errors": f"Unsupported framework: {test_framework}", "returncode": 1}
+    
+def create_info_file(file_path: str, analysis_results: Dict, test_results: Dict, llm_success: bool, categories: List[str], optimization_level: str, output_info: str, min_coverage: float = None) -> None:
+    """Generates and saves an info file (plain text) of the changes."""
+
+    with open(output_info, "w", encoding="utf-8") as f:
+        f.write(f"FabGPT Improvement Report for: {file_path}\n")
+        f.write(f"Timestamp: {datetime.datetime.now().isoformat()}\n\n")
+        f.write(f"LLM Improvement Success: {llm_success}\n")
+        f.write(f"LLM Optimization Level: {optimization_level}\n")
+        f.write(f"Categories Attempted: {', '.join(categories)}\n\n")
+
+        f.write("Changes Made:\n")
+        changes_made = []
+        if shutil.which("black"):
+            changes_made.append("Formatted with Black")
+        if shutil.which("isort"):
+            changes_made.append("Formatted with isort")
+        if llm_success:
+            changes_made.append(f"Applied LLM improvements ({optimization_level})")
+        if test_results: #check if test_results exist
+            changes_made.append("Generated/updated tests")
+        if changes_made:
+            for change in changes_made:
+                f.write(f"* {change}\n")
+        else:
+             f.write("No changes made\n")
+
+
+        f.write("\nStatic Analysis Results:\n")
+        if analysis_results:
+            for tool, result in analysis_results.items():
+                if 'returncode' in result:  # Check if the tool actually ran
+                    outcome = "OK" if result['returncode'] == 0 else f"Errors/Warnings ({len(result.get('output', '').splitlines())})"
+                    f.write(f"* {tool}: {outcome}\n")
+                    if result['errors']:
+                        f.write(f"  Errors/Warnings:\n{result['errors']}\n")
+                else:
+                    f.write(f"* {tool}: Skipped (tool not found)\n")
+        else:
+            f.write("  No static analysis performed.\n")
+
+        f.write("\nTest Results:\n")
+        if test_results:
+            test_outcome = "Passed" if test_results['returncode'] == 0 else "Failed"
+            f.write(f"  Tests: {test_outcome}\n")
+            if "TOTAL" in test_results.get('output', ''):
+                for line in test_results['output'].splitlines():
+                    if line.lstrip().startswith("TOTAL"):
+                        try:
+                            coverage_percentage = float(line.split()[-1].rstrip("%"))
+                            f.write(f"  Code Coverage: {coverage_percentage:.2f}%\n")
+                            if coverage_percentage < min_coverage:
+                                f.write(f"  WARNING: Coverage is below the minimum threshold!\n")
+                        except (ValueError, IndexError):
+                            pass
+            if test_results['returncode'] != 0:
+                f.write(f"  WARNING: Some tests failed!\n  Output:\n{test_results.get('output', '')}\n")
+        else:
+            f.write("  No tests performed.\n")
+
 
 def create_commit(repo: git.Repo, file_path: str, commit_message: str, test_results: Dict[str, Any] = None) -> None:
-    """Creates a commit with the changes. (No changes here, just for context)"""
+    """Creates a commit (no changes here).."""
     try:
         console.print("[blue]Creating commit...[/blue]")
         repo.git.add(file_path)
@@ -703,6 +714,65 @@ def create_pull_request(repo_url: str, token: str, base_branch: str, head_branch
         console.print(f"[red]Error creating Pull Request:[/red] {e}")
         exit(1)
 
+def create_info_file(file_path: str, analysis_results: Dict, test_results: Dict, llm_success: bool, categories: List[str], optimization_level:str, output_info: str, min_coverage: float = None) -> None:
+    """Generates and saves a TEXT report of the changes."""
+
+    with open(output_info, "w", encoding="utf-8") as f:
+        f.write(f"FabGPT Improvement Report for: {file_path}\n")
+        f.write(f"Timestamp: {datetime.datetime.now().isoformat()}\n\n")
+        f.write(f"LLM Improvement Success: {llm_success}\n")
+        f.write(f"LLM Optimization Level: {optimization_level}\n")
+        f.write(f"Categories Attempted: {', '.join(categories)}\n\n")
+
+        f.write("Changes Made:\n")
+        changes_made = []
+        if shutil.which("black"):
+            changes_made.append("Formatted with Black")
+        if shutil.which("isort"):
+            changes_made.append("Formatted with isort")
+        if llm_success:
+            changes_made.append(f"Applied LLM improvements ({optimization_level})")
+        if test_results:  #check if tests_result exist
+            changes_made.append("Generated/updated tests")
+        if changes_made:
+            for change in changes_made:
+                f.write(f"* {change}\n")
+        else:
+             f.write("No changes made\n")
+
+
+        f.write("\nStatic Analysis Results:\n")
+        if analysis_results:
+            for tool, result in analysis_results.items():
+                if 'returncode' in result:
+                    outcome = "OK" if result['returncode'] == 0 else f"Errors/Warnings ({len(result.get('output', '').splitlines())})"
+                    f.write(f"* {tool}: {outcome}\n")
+                    if result['errors']:
+                        f.write(f"  Errors/Warnings:\n{result['errors']}\n")
+                else:
+                    f.write(f"* {tool}: Skipped (tool not found)\n")
+
+        else:
+            f.write("  No static analysis performed.\n")
+
+        f.write("\nTest Results:\n")
+        if test_results:
+            test_outcome = "Passed" if test_results['returncode'] == 0 else "Failed"
+            f.write(f"  Tests: {test_outcome}\n")
+            if "TOTAL" in test_results.get('output', ''):
+                for line in test_results['output'].splitlines():
+                    if line.lstrip().startswith("TOTAL"):
+                        try:
+                            coverage_percentage = float(line.split()[-1].rstrip("%"))
+                            f.write(f"  Code Coverage: {coverage_percentage:.2f}%\n")
+                            if coverage_percentage < min_coverage:
+                                f.write(f"  WARNING: Coverage is below the minimum threshold!\n")
+                        except (ValueError, IndexError):
+                            pass
+            if test_results['returncode'] != 0:
+                f.write(f"  WARNING: Some tests failed!\n  Output:\n{test_results.get('output', '')}\n")
+        else:
+            f.write("  No tests performed.\n")
 
 @click.command()
 @click.option("--repo", "-r", required=True, help="GitHub repository URL.")
@@ -729,10 +799,16 @@ def create_pull_request(repo_url: str, token: str, base_branch: str, head_branch
 @click.option("--config", default=None, type=click.Path(exists=True), callback=get_inputs, is_eager=True, expose_value=False)
 @click.option("--no-output", is_flag=True, help="Disable console output.")
 @click.option("--categories", "-C", default="style,maintenance", help="Comma-separated list of improvement categories.")
+@click.option("--force-push", is_flag=True, help="Force push the branch if it already exists.")
+@click.option("--output-file", "-o", default=None, help="Path to save the modified file. Defaults to overwriting the original.")
+@click.option("--output-info", default="report.txt", help="Path to save the TEXT report. Defaults to report.txt")
+
 def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tools: str, llm_model: str, llm_temperature: float,
-         llm_optimization_level: str, llm_custom_prompt: str, test_framework: str, min_coverage: float,
-         coverage_fail_action: str, commit_message: str, no_dynamic_analysis: bool, cache_dir: str, debug: bool,
-         dry_run: bool, local_commit: bool, fast: bool, openai_api_base: str, no_output: bool, categories: str) -> None:
+        llm_optimization_level: str, llm_custom_prompt: str, test_framework: str, min_coverage: float,
+        coverage_fail_action: str, commit_message: str, no_dynamic_analysis: bool, cache_dir: str, debug: bool,
+        dry_run: bool, local_commit: bool, fast: bool, openai_api_base: str, no_output: bool, categories: str, force_push:bool,
+        output_file: str, output_info:str) -> None: # Added output parameters
+
     """Improves a Python file in a GitHub repository, generates tests, and creates a Pull Request."""
     if no_output:
         console.print = lambda *args, **kwargs: None
@@ -798,6 +874,21 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
     improved_code, llm_success = improve_file(
         file_path, client, llm_model, llm_temperature, categories_list, llm_custom_prompt, analysis_results, debug
     )
+    # --- Save Improved Code (if requested) ---
+    if output_file:
+        try:
+            # Use absolute paths for safety
+            output_file = os.path.abspath(output_file)
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(improved_code)
+            console.print(f"[green]Improved code saved to: {output_file}[/green]")
+        except Exception as e:
+            console.print(f"[red]Error saving improved code to {output_file}: {e}[/red]")
+            exit(1)
+
+    # --- Create and Save Info File ---
+    create_info_file(file_path, analysis_results, test_results, llm_success, categories_list, llm_optimization_level, output_info, min_coverage)
+
 
     if not dry_run:
         console.print("[blue]Commit phase...[/blue]")
@@ -810,11 +901,10 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
             base_name = os.path.basename(file_path)
             summary = f"refactor({base_name}): Improve code"
             if not llm_success:
-                summary += " (LLM improvements failed)"  # Be specific if LLM failed
+                summary += " (LLM improvements failed)"
 
             # 2. Detailed Body (Optional, but very helpful)
             body_lines = []
-            # Add a line for each successfully improved category.
             changes_made = []
             if shutil.which("black"):
                 changes_made.append("Formatted with Black")
@@ -838,16 +928,53 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
             if body_lines:
                 final_commit_message += "\n\n" + "\n".join(body_lines)
 
-
         create_commit(repo_obj, file_path, final_commit_message, test_results)
+
+
+    MAX_PUSH_RETRIES = 3 #add MAX_PUSH_RETRIES
 
     if not dry_run and not local_commit:
         console.print("[blue]Pull Request creation phase...[/blue]")
+        # --- Push the branch (with retry logic) ---
+        push_successful = False
+        for attempt in range(MAX_PUSH_RETRIES):
+            try:
+                console.print(f"[blue]Pushing branch: {new_branch_name} (attempt {attempt+1})[/blue]")
+                repo_obj.git.push("origin", new_branch_name)
+                console.print(f"[green]Branch pushed successfully.[/green]")
+                push_successful = True
+                break  # Exit the retry loop on success
+            except git.exc.GitCommandError as e:
+                console.print(f"[yellow]Push failed (attempt {attempt + 1}): {e}[/yellow]")
+                if "already exists" in str(e).lower():  # Check for the "already exists" error
+                    if force_push:
+                         try:
+                             console.print("[yellow]Force pushing branch...[/yellow]")
+                             repo_obj.git.push("--force", "origin", new_branch_name)
+                             console.print(f"[green]Branch pushed successfully.[/green]")
+                             push_successful = True
+                             break
+                         except git.exc.GitCommandError as e:
+                              console.print(f"[red]Error force pushing:[/red] {e}")
+                              exit(1)
+                    else:
+                        # Generate a *new* unique branch name and retry
+                        console.print("[yellow]Generating a new unique branch name...[/yellow]")
+                        new_branch_name = create_branch(repo_obj, file_path, file_purpose)
+                else:
+                    # Some other error occurred during push, exit
+                    console.print(f"[red]Error pushing branch:[/red] {e}")
+                    exit(1)
+        if not push_successful:
+             console.print(f"[red]Failed to push branch after {MAX_PUSH_RETRIES} attempts. Aborting.[/red]")
+             exit(1)
+
+        # --- Create the Pull Request ---
         create_pull_request(
             repo_url=repo,
             token=token,
             base_branch=branch,
-            head_branch=new_branch_name,  # Pass the branch name. We'll namespace it inside.
+            head_branch=new_branch_name,
             commit_message=final_commit_message,
             analysis_results=analysis_results,
             test_results=test_results,
@@ -856,17 +983,18 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
             test_framework=test_framework,
             min_coverage=min_coverage,
             coverage_fail_action=coverage_fail_action,
-            repo_path = temp_dir,
+            repo_path=temp_dir,
             debug=debug
         )
     elif local_commit:
         console.print("[yellow]Local commit performed: no Pull Request created.[/yellow]")
     else:
         console.print("[yellow]Dry run performed: no changes made to the remote files.[/yellow]")
-        restore_backup(file_path, file_path + ".bak")
+        if not output_file:  # Only restore if not saving to a separate output file
+            restore_backup(file_path, file_path + ".bak")
 
     if not debug:
-        shutil.rmtree(temp_dir)
+        shutil.rmtree(temp_dir) # Clean up the temporary directory
 
-if __debug__:  # pragma: no cover
-    main()  # pragma: no cover
+if __name__ == "__main__":
+    main()
