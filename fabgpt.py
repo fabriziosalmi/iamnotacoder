@@ -677,7 +677,7 @@ def create_pull_request(repo_url: str, token: str, base_branch: str, head_branch
             body += f"\n| Tests | {test_outcome} |\n"
 
             if "TOTAL" in test_results.get('output', ''):
-                for line in test_results['output'].splitlines():
+                for line in test_results.get('output').splitlines():
                     if line.lstrip().startswith("TOTAL"):
                         try:
                             coverage_percentage = float(line.split()[-1].rstrip("%"))
@@ -760,7 +760,7 @@ def create_info_file(file_path: str, analysis_results: Dict, test_results: Dict,
             test_outcome = "Passed" if test_results['returncode'] == 0 else "Failed"
             f.write(f"  Tests: {test_outcome}\n")
             if "TOTAL" in test_results.get('output', ''):
-                for line in test_results['output'].splitlines():
+                for line in test_results.get('output').splitlines():
                     if line.lstrip().startswith("TOTAL"):
                         try:
                             coverage_percentage = float(line.split()[-1].rstrip("%"))
@@ -838,6 +838,9 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
     file_path = os.path.join(temp_dir, file)
     checkout_branch(repo_obj, branch)
     file_purpose = get_file_purpose(file_path)
+    # Capture original file content before improvements
+    with open(file_path, "r", encoding="utf-8") as f:
+        original_code = f.read()
     categories_list = [c.strip() for c in categories.split(",")]
 
     # --- Analysis and Test Generation (Keep track of what happened) ---
@@ -850,23 +853,13 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
             temp_dir, file_path, tools.split(","), exclude_tools.split(","), cache_dir, debug
         )
         console.print("[blue]Test generation phase...[/blue]")
-        with Progress(
-            "[progress.description]{task.description}",
-            transient=True,
-            ) as progress:
-            progress.add_task("[cyan]Generating tests...", total=None)
-            generated_tests = generate_tests(
-                file_path, client, llm_model, llm_temperature, test_framework, llm_custom_prompt, debug
-            )
-            if generated_tests:
-                tests_generated = True  # Set the flag!
-                console.print("[blue]Test execution phase...[/blue]")
-                with Progress(
-                    "[progress.description]{task.description}",
-                    transient=True,
-                ) as progress:
-                    progress.add_task("[cyan]Running tests...", total=None)
-                    test_results = run_tests(temp_dir, file_path, test_framework, min_coverage, coverage_fail_action, debug)
+        # Removed nested Progress block here to avoid multiple live displays
+        generated_tests = generate_tests(
+            file_path, client, llm_model, llm_temperature, test_framework, llm_custom_prompt, debug
+        )
+        if generated_tests:
+            tests_generated = True
+        # ...existing code...
 
     new_branch_name = create_branch(repo_obj, file, file_purpose)
 
@@ -874,6 +867,12 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
     improved_code, llm_success = improve_file(
         file_path, client, llm_model, llm_temperature, categories_list, llm_custom_prompt, analysis_results, debug
     )
+    # Check for any changes
+    with open(file_path, "r", encoding="utf-8") as f:
+        new_code = f.read()
+    if new_code.strip() == original_code.strip():
+        console.print("[yellow]No changes detected. Skipping commit and PR creation.[/yellow]")
+        exit(0)
     # --- Save Improved Code (if requested) ---
     if output_file:
         try:
