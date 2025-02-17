@@ -242,7 +242,7 @@ def analyze_project(
 
     results = {}
     console.print("[blue]Running static analysis...[/blue]")
-   
+
     # Use a consistent Progress object
     with Progress(
         SpinnerColumn(),
@@ -1059,7 +1059,6 @@ def create_info_file(
         else:
             f.write("  No tests performed.\n")
 
-
 def create_commit(
     repo: git.Repo,
     file_path: str,
@@ -1076,25 +1075,25 @@ def create_commit(
             if os.path.exists(tests_dir):
                 repo.git.add(tests_dir)
 
-        # Construct the PR body
+        # Construct the commit message body
+        body = ""
+        # Define category icons
+        category_icons = {
+            "style": "🎨",
+            "maintenance": "🛠️",
+            "security": "🔒",
+            "performance": "⚡",
+            "testing": "🧪",
+            "documentation": "📚",
+            "refactor": "♻️",
+            "bugfix": "🐛",
+            "feature": "✨",
+            "static_analysis": "⚠️",  # Add this for static analysis section
+            "changes": "✨",          # Add this for changes section
+            "test_results": "🧪"     # Add this for test results section
+        }
+
         if llm_improvements_summary:
-            body = ""
-            # Define category icons
-            category_icons = {
-                "style": "🎨",
-                "maintenance": "🛠️",
-                "security": "🔒",
-                "performance": "⚡",
-                "testing": "🧪",
-                "documentation": "📚",
-                "refactor": "♻️",
-                "bugfix": "🐛",
-                "feature": "✨",
-                "static_analysis": "⚠️",  # Add this for static analysis section
-                "changes": "✨",          # Add this for changes section
-                "test_results": "🧪"     # Add this for test results section
-            }
-            
             for category, improvements in llm_improvements_summary.items():
                 if improvements and improvements != ["Error retrieving improvements."]:
                     # Get the icon for the category, default to "✨" if not found
@@ -1102,7 +1101,10 @@ def create_commit(
                     body += f"\n{icon} **{category.capitalize()} Improvements:**\n"
                     for improvement in improvements:
                         body += f"- {improvement}\n"
+
+        if body:
             commit_message += "\n\n" + body.strip()
+
 
         repo.index.commit(commit_message)
         console.print(f"[green]Commit created:[/green] {commit_message}")
@@ -1110,6 +1112,7 @@ def create_commit(
         console.print(f"[red]Error creating commit:[/red] {e}")
         logging.exception("Error creating commit")
         exit(1)
+
 
 
 def create_pull_request(
@@ -1135,7 +1138,7 @@ def create_pull_request(
         g = Github(token)
         repo_name = repo_url.replace("https://github.com/", "")
         repo = g.get_repo(repo_name)
-        
+
         # Define category icons
         category_icons = {
             "changes": "✨",
@@ -1150,24 +1153,24 @@ def create_pull_request(
             "bugfix": "🐛",
             "feature": "✨"
         }
-        
+
         # Extract the commit message components
         commit_lines = commit_message.split('\n\n')
         pr_title = commit_lines[0]
-        
+
         # Construct PR body with rich formatting
         body = f"## {os.path.basename(file_path)} Improvements\n\n"
-        
+
         # Add commit message content with preserved formatting and icons
         for section in commit_lines[1:]:
             # Changes Made section
             if "Changes Made:" in section:
                 body += f"{category_icons['changes']} " + section.replace("**Changes Made:**", "**Changes Made:**") + "\n\n"
-            
+
             # Static Analysis section
             elif "Static Analysis" in section:
                 body += f"{category_icons['static_analysis']} " + section.replace("**Static Analysis", "**Static Analysis") + "\n\n"
-            
+
             # Category-specific improvements
             elif any(f"{cat.capitalize()} Improvements:" in section for cat in categories):
                 for cat in categories:
@@ -1175,7 +1178,7 @@ def create_pull_request(
                         icon = category_icons.get(cat.lower(), "✨")
                         body += f"{icon} " + section + "\n\n"
                         break
-            
+
             # Test Results section
             elif "Test Results:" in section:
                 body += f"{category_icons['testing']} " + section + "\n\n"
@@ -1187,13 +1190,15 @@ def create_pull_request(
             head=f"{g.get_user().login}:{head_branch}",
             base=base_branch
         )
-        
+
         console.print(f"[green]Pull Request created:[/green] {pr.html_url}")
-        
+
     except Exception as e:
         console.print(f"[red]Error creating Pull Request:[/red] {e}")
         logging.exception("Error creating Pull Request")
         exit(1)
+
+
 
 
 @click.command()
@@ -1541,10 +1546,31 @@ def main(
 
         # --- Build the Commit Message ---
         base_name = os.path.basename(file_path)
-        summary = f"refactor({base_name}): ✨ Improve code"  # Added an emoji
+
+        # Start constructing the commit message.  Use a list to build it up.
+        commit_message_parts = []
+
+        # Determine the main type of commit.  Start with "refactor".
+        commit_type = "refactor"
+
+        # --- Determine the main type based on what happened ---
+        if "bugfix" in categories_list and llm_success:  # Prioritize bugfix
+             commit_type = "fix"
+        elif "feature" in categories_list and llm_success: # then feature
+            commit_type = "feat"
+        # if there are test generated/updated, add test as part of the type
+        if tests_generated:
+             commit_type = f"{commit_type}, test"
+        # Add the commit type and scope.
+        commit_message_parts.append(f"{commit_type}({base_name}):")
+
+        # Initial summary line:
+        summary = "✨ Improve code"
         if not llm_success:
             summary += " (LLM improvements failed)"
+        commit_message_parts.append(summary)
 
+        #  --- Changes Made ---
         body_lines = []
         changes_made = []
 
@@ -1559,29 +1585,31 @@ def main(
             )
         if tests_generated:
             changes_made.append("Generated/updated tests")
+        # Add a blank line before the body
+        if changes_made or analysis_diff or test_results:
+            body_lines.append("") #  add empty line before the body
 
         if changes_made:
             body_lines.append("✨ **Changes Made:**")  # More descriptive
             for change in changes_made:
                 body_lines.append(f"- {change}")  # Use a list format
-        else:
-            body_lines.append("No changes made.")
+        # No need for an "else" here; just don't add the section if empty
 
-        # Add static analysis *differences* to commit body
+        # --- Static Analysis Differences ---
         if analysis_diff:
             body_lines.append("\n⚠️ **Static Analysis Improvements:**")
             for tool, diff in analysis_diff.items():
                 if diff < 0:
                     body_lines.append(
-                        f"  - {tool}: Reduced {abs(diff)} errors/warnings"
+                        f"- {tool}: Reduced {abs(diff)} errors/warnings"
                     )
                 elif diff > 0:
                     body_lines.append(
-                        f"  - {tool}: Increased {diff} errors/warnings (check required)"
+                        f"- {tool}: Increased {diff} errors/warnings (check required)"
                     )
                 # Don't report if no change (diff == 0)
 
-        # Add test results to commit body
+        # --- Test Results ---
         if test_results:
             test_outcome = (
                 "✅ Passed" if test_results["returncode"] == 0 else "❌ Failed"
@@ -1596,18 +1624,42 @@ def main(
                                 line.split()[-1].rstrip("%")
                             )
                             body_lines.append(
-                                f"    - Code Coverage: {coverage_percentage:.2f}%"
+                                f"  - Code Coverage: {coverage_percentage:.2f}%"
                             )
                         except (ValueError, IndexError):
                             pass
 
-        final_commit_message = summary  # Start with the summary
+        # --- LLM improvement summary ---
+        if llm_improvements_summary:
+             body_lines.append("") # Empty line for separation
+             category_icons = {  # copied to avoid duplication, centralize!
+                "style": "🎨",
+                "maintenance": "🛠️",
+                "security": "🔒",
+                "performance": "⚡",
+                "testing": "🧪",
+                "documentation": "📚",
+                "refactor": "♻️",
+                "bugfix": "🐛",
+                "feature": "✨",
+             }
+
+             for category, improvements in llm_improvements_summary.items():
+                if improvements and improvements != ["Error retrieving improvements."]:
+                    icon = category_icons.get(category.lower(), "✨")
+                    body_lines.append(f"{icon} **{category.capitalize()} Improvements:**")
+                    for improvement in improvements:
+                        body_lines.append(f"- {improvement}")
+
+        # Combine the commit message parts:
         if body_lines:
-            final_commit_message += "\n\n" + "\n".join(body_lines)  # Add the body
-        if commit_message:
-            final_commit_message = (
-                commit_message  # Use custom commit message if provided
-            )
+              commit_message_parts.extend(body_lines)
+
+        final_commit_message = "\n".join(commit_message_parts)
+
+        if commit_message:  # Override with custom message if given
+            final_commit_message = commit_message
+
 
         create_commit(
             repo_obj,
@@ -1618,8 +1670,6 @@ def main(
         )  # Create commit, Pass LLM summary
 
         # --- Push and Pull Request (if not dry run and not local commit) ---
-
-        MAX_PUSH_RETRIES = 3  # add MAX_PUSH_RETRIES
 
         if not dry_run and not local_commit:
             console.print("[blue]Pull Request creation phase...[/blue]")
