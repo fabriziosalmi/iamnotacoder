@@ -644,7 +644,7 @@ def create_pull_request(repo_url: str, token: str, base_branch: str, head_branch
     """Creates a Pull Request on GitHub."""
     try:
         console.print(f"[blue]Creating Pull Request...[/blue]")
-        g = Github(token)
+        g = GitHub(token)
         repo_name = repo_url.replace("https://github.com/", "")
         repo = g.get_repo(repo_name)
 
@@ -740,7 +740,7 @@ def create_pull_request(repo_url: str, token: str, base_branch: str, head_branch
 @click.option("--openai-api-base", default=None, help="Base URL for OpenAI API (for LMStudio, e.g., http://localhost:1234/v1).")
 @click.option("--config", default=None, type=click.Path(exists=True), callback=get_inputs, is_eager=True, expose_value=False)
 @click.option("--no-output", is_flag=True, help="Disable console output.")
-@click.option("--categories", "-C", default="style,maintenance", help="Comma-separated list of improvement categories.")
+@click.option("--categories", "-C", default="style,maintenance,security,performance", help="Comma-separated list of improvement categories.  Defaults to 'style,maintenance,security,performance'.")
 @click.option("--force-push", is_flag=True, help="Force push the branch if it already exists.")
 @click.option("--output-file", "-o", default=None, help="Path to save the modified file. Defaults to overwriting the original.")
 @click.option("--output-info", default="report.txt", help="Path to save the TEXT report. Defaults to report.txt")

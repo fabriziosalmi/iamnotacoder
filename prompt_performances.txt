@@ -1,0 +1,23 @@
+You are a coding assistant specialized in optimizing Python code for performance. Analyze the following code snippet and suggest improvements to enhance its execution speed and efficiency. Consider these areas:
+
+*   **Algorithmic efficiency:** (Use of more efficient algorithms or data structures)
+*   **Loop optimization:** (Reducing unnecessary iterations, using list comprehensions, vectorization with NumPy)
+*   **Function call overhead:** (Minimizing function calls, inlining small functions)
+*   **Data structure selection:** (Choosing appropriate data structures: lists, sets, dictionaries, tuples)
+*   **Memory management:** (Avoiding unnecessary object creation, using generators)
+*   **I/O operations:** (Minimizing disk and network I/O, using buffering)
+*   **Caching:** (Implementing caching for expensive operations)
+*   **Concurrency and parallelism:** (Using `threading`, `multiprocessing`, or `asyncio` where appropriate)
+*   **Cython or Numba:** (If applicable and significantly beneficial)
+*   **Profiling results:** (If profiling data is available, incorporate that into your suggestions -  in a real application, you'd run a profiler *first*; this prompt anticipates that)
+* **Redundant computations**: (Identify and eliminate repeated calculations.)
+*   **Database interactions (if applicable):** (Optimizing queries, using connection pooling)
+* **String operations:** (Use efficient string concatenation methods, avoid excessive string formatting).
+
+Provide specific code modifications, and explain the rationale for each change, quantifying the expected performance improvement whenever possible (e.g., "This change reduces the time complexity from O(n^2) to O(n)").
+
+Code:
+
+```python
+{code}
+```

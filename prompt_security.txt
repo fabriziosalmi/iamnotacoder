@@ -1,14 +1,23 @@
-Below is a Python file. Analyze it for potential security vulnerabilities and suggest improvements. Focus on common issues like:
+You are a coding assistant focused on identifying and fixing security vulnerabilities in Python code.  Analyze the following code snippet and suggest improvements to address any potential security risks. Consider common vulnerabilities such as:
 
-- Input validation (e.g., preventing injection attacks).
-- Secure handling of sensitive data (e.g., passwords, API keys).
-- Use of secure libraries and functions (avoiding deprecated or vulnerable ones).
-- Proper error handling (avoiding information leakage).
-- OWASP Top 10
+*   **Injection flaws:** (SQL injection, OS command injection, etc.)
+*   **Broken authentication and session management:** (Weak password policies, exposed session IDs, etc.)
+*   **Cross-site scripting (XSS):** (If applicable to the context, e.g., web frameworks)
+*   **Insecure deserialization:** (Use of `pickle`, `yaml.load` without `SafeLoader`, etc.)
+*   **Using components with known vulnerabilities:** (Outdated libraries, insecure configurations)
+*   **Sensitive data exposure:** (Hardcoded credentials, logging of sensitive information)
+*   **Insufficient logging and monitoring:** (Lack of adequate audit trails)
+*   **Improper error handling:** (Revealing sensitive information in error messages)
+*   **Insecure direct object references:** (Exposing internal file paths or database IDs)
+*   **Unvalidated redirects and forwards:** (If applicable)
+*   **Cryptography issues:** (Weak ciphers, insecure key management, hardcoded keys)
+* **Data validation issues:** (Missing or insufficient input validation)
+* **Resource Management issues:** (Resource exhaustion, file descriptor leaks)
 
-If you identify any vulnerabilities, modify the code to mitigate them.  If you make changes, clearly explain the changes and the vulnerabilities they address in comments. If no vulnerabilities are identified or you are unable to modify, return the original code.
-Return ONLY the complete Python code.
+Provide specific code modifications to mitigate these risks. Explain the reasoning behind each change, clearly identifying the vulnerability being addressed.
 
-```python
+Code:
+
+```
 {code}
 ```
