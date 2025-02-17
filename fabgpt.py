@@ -983,7 +983,7 @@ def create_commit(
     file_paths: List[str],  # Now accepts a list of file paths
     commit_message: str,
     test_results: Dict[str, Any] = None,
-    llm_improvements_summary: Dict[str, List[str]] = None,
+    llm_improvements_summary: Dict[str, List[str]] = None,  # Parameter no longer used
 ) -> None:
     """Creates a Git commit."""
     try:
@@ -1002,7 +1002,6 @@ def create_commit(
                 custom_content = cc.read().strip()
             if custom_content:
                 # Prepend custom commit message
-                # commit_message = f"{custom_content}\n\n{commit_message\n\nCheck [this](https://github.com/fabriziosalmi/FabGPT) out!}"
                 commit_message = f"{custom_content}\n\n{commit_message}"
 
         repo.index.commit(commit_message)
@@ -1206,7 +1205,7 @@ def main(
     test_framework: str,
     min_coverage: float,
     coverage_fail_action: str,
-    commit_message: str,
+    commit_message: str,  # This parameter isn't directly used anymore
     no_dynamic_analysis: bool,
     cache_dir: str,
     debug: bool,
@@ -1287,7 +1286,7 @@ def main(
 
             # --- ADD DELAY HERE ---
             time.sleep(5)  # Wait 5 seconds (adjust as needed)
-            
+
         except Exception as e:
             console.print(f"[red]Error forking repository: {e}[/red]")
             sys.exit(1)
@@ -1310,9 +1309,6 @@ def main(
         repo_url, token
     )  # Clone the fork or original
     files_list = [f.strip() for f in files.split(",")]
-    final_commit_message = (
-        ""  # Initialize an empty string to store the commit message
-    )
     improved_files_info = {}  # Store per-file improvements
     pr_url = None  # Initialize pr_url here
 
@@ -1479,9 +1475,9 @@ def main(
         create_commit(
             repo_obj,
             files_list,
-            f"{commit_title}\n\n{commit_body}",
+            f"{commit_title}\n\n{commit_body}",  # Correctly combine title and body
             test_results,
-        )  # combine title and body
+        )
         if not local_commit:
             # --- PUSH (to your fork) ---
             try:
@@ -1491,23 +1487,22 @@ def main(
                     repo_obj.git.push("origin", new_branch_name)
                 console.print(
                     f"[green]Branch pushed to your fork: {new_branch_name}[/green]"
-                )  # Clearer message
+                )
             except git.exc.GitCommandError as e:
                 console.print(
                     f"[red]Error pushing branch to your fork: {e}[/red]"
-                )  # and here
+                )
                 logging.exception("Error pushing branch")
-                sys.exit(1)  # Use sys.exit
+                sys.exit(1)
 
             # --- CREATE PULL REQUEST (from your fork to the original repo) ---
-            # This is the key part that changes:
             create_pull_request_programatically(
                 repo,  # Original Repo
                 token,  # Your Token
                 branch,  # Base Branch (e.g., main, develop)
                 f"{fork_user}:{new_branch_name}",  # Head branch: YOURUSER:your-branch-name
-                commit_title,
-                commit_body,
+                commit_title,  # Use the separate title
+                commit_body,  # Use the separate body
                 final_analysis_results,
                 test_results,
                 files_list,
@@ -1515,7 +1510,7 @@ def main(
                 test_framework,
                 min_coverage,
                 coverage_fail_action,
-                temp_dir,  # Pass temp_dir instead of repo_path
+                temp_dir,  # Pass temp_dir
                 categories_list,
                 debug,
                 force_push,
@@ -1526,13 +1521,13 @@ def main(
         "repository": repo,
         "branch": branch,  # Original branch
         "files_improved": improved_files_info,
-        "commit_message": final_commit_message,
+        "commit_message": f"{commit_title}\n\n{commit_body}", #combined title and body for the log
         "pr_url": pr_url,
         "timestamp": datetime.datetime.now().isoformat(),
     }
     log_dir = os.path.join(
         "/Users/fab/GitHub/FabGPT", "logs"
-    )  # set up your correct log dir
+    )  #  log dir
     os.makedirs(log_dir, exist_ok=True)
     log_file_path = os.path.join(log_dir, f"log_{int(time.time())}.json")
     with open(log_file_path, "w", encoding="utf-8") as log_file:
