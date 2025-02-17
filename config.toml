@@ -1,6 +1,6 @@
     openai_api_key = "none"
     openai_api_base = "http://localhost:1234/v1"  # Per LM Studio, se applicabile
-    llm_model = "qwen2.5-coder-14b-instruct-mlx"
+    llm_model = "qwen2.5-coder-7b-instruct-mlx"
     llm_temperature = 0.2
     llm_optimization_level = "balanced"
     tools = "black,isort,pylint,flake8"

@@ -4,8 +4,6 @@ import tempfile
 import subprocess
 import toml
 import click
-from openai import OpenAI, Timeout  # Keep the Timeout import
-import openai # Import the openai module
 from openai import OpenAI, Timeout
 import datetime
 import shutil
@@ -24,10 +22,6 @@ import logging
 import difflib
 from rich.logging import RichHandler
 import sys  # Import sys
-      
-import openai  # Add this line!
-
-    
 
 console = Console()
 
@@ -39,7 +33,7 @@ logging.basicConfig(
 )
 
 # Constants
-DEFAULT_LLM_MODEL: str = "qwen2.5-coder-14b-instruct-mlx"  # Default model
+DEFAULT_LLM_MODEL: str = "qwen2.5-coder-7b-instruct-mlx"  # Default model
 DEFAULT_LLM_TEMPERATURE: float = 0.2
 MAX_SYNTAX_RETRIES: int = 5
 MAX_LLM_RETRIES: int = 3
@@ -747,7 +741,7 @@ def generate_tests(
                     generated_tests, file_base_name
                 )  # Check again
                 syntax_errors += 1
-            except openai.Timeout:  # Use openai.Timeout
+            except Timeout:
                 console.print(
                     "[yellow]Timeout during test syntax correction (attempt"
                     f" {syntax_errors+1}).[/yellow]"
@@ -763,9 +757,6 @@ def generate_tests(
                     )
                     return ""  # Give up on generating tests
                 continue  # Try again
-            except openai.NotFoundError as e: # Catch openai.NotFoundError
-                console.print(f"[red]OpenAI model not found: {e}[/red]")
-                return ""
 
         if had_errors:
             console.print(
@@ -773,14 +764,11 @@ def generate_tests(
             )
             return ""
 
-    except openai.Timeout:  # Use openai.Timeout here too!
+    except Timeout:
         console.print(
             "[yellow]Timeout during initial LLM call for test generation.[/yellow]"
         )
         logging.warning("Timeout during initial LLM call for test generation")
-        return ""
-    except openai.NotFoundError as e: # Catch openai.NotFoundError
-        console.print(f"[red]OpenAI model not found: {e}[/red]")
         return ""
     except Exception as e:
         console.print(
@@ -826,7 +814,7 @@ def generate_tests(
             f"[debug] Generated test code:\n{generated_tests}"
         )  # Print the code for debugging
         return ""
-    
+
 
 def run_tests(
     repo_path: str,
