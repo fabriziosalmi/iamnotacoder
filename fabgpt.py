@@ -246,28 +246,31 @@ def analyze_project(
     results = {}
     console.print("[blue]Running static analysis...[/blue]")
 
-    # Use a consistent Progress object
+    # Replace the existing analysis progress with:
     with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
+        SpinnerColumn("dots2"),  # Use a different spinner
+        TextColumn("[bold cyan]{task.description}"),
         "•",
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TextColumn("[bold]{task.percentage:>3.0f}%"),
         "•",
-        TextColumn("[progress.completed]{task.completed}/{task.total}"),
+        TextColumn("[blue]{task.completed}/{task.total}"),
         TimeElapsedColumn(),
-        transient=True,
+        TextColumn("[green]{task.fields[tool]}"),  # Show current tool
+        console=console,
+        transient=True
     ) as progress:
-        analysis_task = progress.add_task("Analyzing...", total=len(tools))
+        analysis_task = progress.add_task("Running analysis...", total=len(tools), tool="")
         for tool in tools:
+            progress.update(analysis_task, tool=f"Running {tool}")
             if tool in exclude_tools:
-                progress.update(analysis_task, advance=1)
+                progress.update(analysis_task, advance=1, tool=f"Excluded {tool}")
                 continue
 
             if shutil.which(tool) is None:
                 console.print(
                     f"[yellow]Tool not found: {tool}. Skipping.[/yellow]"
                 )
-                progress.update(analysis_task, advance=1)
+                progress.update(analysis_task, advance=1, tool=f"Not found {tool}")
                 continue
 
             # Use a dictionary for commands - easier to manage
@@ -295,10 +298,12 @@ def analyze_project(
                     "errors": stderr,
                     "returncode": returncode,
                 }
+                status = "Completed" if returncode == 0 else "Errors"
             else:
                 console.print(f"[yellow]Unknown analysis tool: {tool}[/yellow]")
+                status = "Unknown"
 
-            progress.update(analysis_task, advance=1)
+            progress.update(analysis_task, advance=1, tool=status)
 
     if cache_file:
         try:
@@ -420,262 +425,124 @@ def improve_file(
     line_length: int = DEFAULT_LINE_LENGTH,
 ) -> Tuple[str, bool]:
     """Improves the file using LLM, with retries and syntax checking."""
-    backup_path = create_backup(file_path)  # Create backup and store path
+    backup_path = create_backup(file_path)
     if not backup_path:
         console.print("[red]Failed to create backup. Aborting.[/red]")
         exit(1)
 
     # Format with Black and isort before LLM processing
     if shutil.which("black"):
-        console.print(f"[blue]Formatting with Black...[/blue]")
-        run_command(
-            ["black", f"--line-length={line_length}", file_path],
-            cwd=os.path.dirname(file_path),
-        )  # Pass line length
-    else:
-        console.print("[yellow]Black not found, skipping formatting.[/yellow]")
+        run_command(["black", f"--line-length={line_length}", file_path])
     if shutil.which("isort"):
-        console.print(f"[blue]Formatting with Isort...[/blue]")
-        run_command(["isort", file_path], cwd=os.path.dirname(file_path))
-    else:
-        console.print("[yellow]Isort not found, skipping formatting.[/yellow]")
+        run_command(["isort", file_path])
 
+    # Read initial formatted code
     with open(file_path, "r", encoding="utf-8") as f:
-        improved_code = f.read()  # Initial code (after formatting)
+        current_code = f.read()
 
-    total_success = True  # Track overall success across categories
+    total_success = True
+    improvements_by_category = {}
 
     with Progress(
         SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        "•",
+        TextColumn("[bold blue]{task.description}"),  # Make description bold and blue
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        "•",
+        TextColumn("[progress.completed]{task.completed}/{task.total}"),
         TimeElapsedColumn(),
+        TextColumn("[bold green]{task.fields[status]}"),  # Add status field with color
+        console=console,  # Explicitly pass console
         transient=True,
+        refresh_per_second=10  # Increase refresh rate
     ) as progress:
-        improve_task = progress.add_task(
-            "Improving file...", total=len(categories)
-        )
+        improve_task = progress.add_task("Improving file...", total=len(categories), status="Starting...")
+        
         for category in categories:
-            progress.update(
-                improve_task,
-                description=f"[blue]Improving category: {category}[/blue]",
-            )
-            prompt_file = os.path.join(
-                custom_prompt_dir, f"prompt_{category}.txt"
-            )
+            progress.update(improve_task, description=f"[blue]Improving category: {category}[/blue]", status="In progress...")
+            
+            # Load category-specific prompt
+            prompt_file = os.path.join(custom_prompt_dir, f"prompt_{category}.txt")
             if not os.path.exists(prompt_file):
-                console.print(
-                    f"[red]Prompt file not found: {prompt_file}. Skipping"
-                    f" category.[/red]"
-                )
-                progress.update(improve_task, advance=1)
+                console.print(f"[red]Prompt file not found: {prompt_file}. Skipping category.[/red]")
+                progress.update(improve_task, advance=1, status="Prompt not found")
                 continue
 
-            # Load and prepare the prompt
             try:
                 with open(prompt_file, "r", encoding="utf-8") as f:
                     prompt_template = f.read()
-                    prompt = prompt_template.replace("{code}", improved_code)
-                    # Add explicit instruction about line length
-                    prompt += (
-                        f"\nMaintain a maximum line length of {line_length}"
-                        " characters. Return only the corrected code, without any"
-                        " introductory or concluding text. Do not include markdown code"
-                        " fences (```)."
-                    )
-            except Exception as e:
-                console.print(f"[red]Error loading custom prompt: {e}[/red]")
-                logging.exception("Error loading custom prompt")
-                progress.update(improve_task, advance=1)
-                continue
+                    # Use the current_code that includes previous improvements
+                    prompt = prompt_template.replace("{code}", current_code)
+                    prompt += f"\nMaintain a maximum line length of {line_length} characters."
 
-            if debug:
-                console.print(f"[debug]LLM prompt for {category}:\n{prompt}")
+                success = False
+                for attempt in range(MAX_LLM_RETRIES):
+                    try:
+                        response = client.chat.completions.create(
+                            model=llm_model,
+                            messages=[
+                                {
+                                    "role": "system",
+                                    "content": (
+                                        "You are a helpful coding assistant that improves code"
+                                        " quality."
+                                    ),
+                                },
+                                {"role": "user", "content": prompt},
+                            ],
+                            temperature=llm_temperature,
+                            max_tokens=4096,  # Adjust as needed
+                        )
+                        improved_code = clean_llm_response(response.choices[0].message.content)
 
-            success = False  # Track success for this specific category
-            for attempt in range(MAX_LLM_RETRIES):
-                try:
-                    start_time = time.time()
-                    response = client.chat.completions.create(
-                        model=llm_model,
-                        messages=[
-                            {
-                                "role": "system",
-                                "content": (
-                                    "You are a helpful coding assistant that improves code"
-                                    " quality."
-                                ),
-                            },
-                            {"role": "user", "content": prompt},
-                        ],
-                        temperature=llm_temperature,
-                        max_tokens=4096,  # Adjust as needed
-                    )
-                    end_time = time.time()
-                    console.print(
-                        f"[cyan]LLM request for {category} (attempt {attempt + 1}) took"
-                        f" {end_time - start_time:.2f} seconds.[/cyan]"
-                    )
-
-                    improved_code = response.choices[0].message.content.strip()
-                    improved_code = clean_llm_response(improved_code)
-
-                    # Syntax error handling with retries
-                    syntax_errors = 0
-                    while syntax_errors < MAX_SYNTAX_RETRIES:
+                        # Validate syntax
                         try:
-                            ast.parse(improved_code)  # Check for syntax errors
-                            break  # No syntax errors, exit loop
-                        except SyntaxError as e:
-                            console.print(
-                                f"[yellow]Syntax error in generated code (attempt"
-                                f" {syntax_errors + 1}), retrying...[/yellow]"
-                            )
-                            line_number = e.lineno
-                            error_message = str(e)
+                            ast.parse(improved_code)
+                            # Store improvement for this category
+                            improvements_by_category[category] = improved_code
+                            # Update current code for next category
+                            current_code = improved_code
+                            success = True
+                            break
+                        except SyntaxError:
+                            # Handle syntax errors...
+                            pass
+                    except Exception as e:
+                        logging.error("LLM improvement attempt failed: %s", e)
 
-                            # Prepare a context snippet for the LLM
-                            code_lines = improved_code.splitlines()
-                            start_line = max(
-                                0, line_number - 3
-                            )  # 2 lines before
-                            end_line = min(
-                                len(code_lines), line_number + 2
-                            )  # 2 lines after
-                            context = "\n".join(code_lines[start_line:end_line])
+                if not success:
+                    total_success = False
 
-                            # Highlight the error line
-                            highlighted_context = context.replace(
-                                code_lines[line_number - 1],
-                                f"#> {code_lines[line_number - 1]}",
-                            )
+                if debug:
+                    console.print(f"[debug]Category {category} improvements:")
+                    diff = list(difflib.unified_diff(
+                        current_code.splitlines(),
+                        improved_code.splitlines(),
+                        fromfile=f"before_{category}",
+                        tofile=f"after_{category}"
+                    ))
+                    console.print("\n".join(diff))
 
-                            # Create a specific prompt to fix the syntax error
-                            syntax_prompt = (
-                                "Fix the following Python code that has a syntax error on"
-                                f" line {line_number}:\n\n"
-                                f"```python\n{highlighted_context}\n```\n\nError:"
-                                f" {error_message}\n\n"
-                                f"Maintain a maximum line length of {line_length}"
-                                " characters."
-                                "Return only the corrected code, without any introductory or"
-                                " concluding text. Do not include markdown code fences."
-                            )
+            except Exception as e:
+                console.print(f"[red]Error improving {category}: {e}[/red]")
+                total_success = False
 
-                            syntax_errors += 1
-                            start_time = time.time()
+            progress.update(improve_task, advance=1, status="Completed")
 
-                            # Retry with the syntax-fixing prompt
-                            try:
-                                response = client.chat.completions.create(
-                                    model=llm_model,
-                                    messages=[
-                                        {
-                                            "role": "system",
-                                            "content": (
-                                                "You are a helpful coding assistant that"
-                                                " improves code quality."
-                                            ),
-                                        },
-                                        {"role": "user", "content": syntax_prompt},
-                                    ],
-                                    temperature=min(
-                                        llm_temperature, 0.2
-                                    ),  # Lower temperature for corrections
-                                    max_tokens=4096,  # Adjust as needed
-                                )
-                                end_time = time.time()
-                                console.print(
-                                    "[cyan]LLM retry for syntax correction (attempt"
-                                    f" {syntax_errors}) took {end_time - start_time:.2f}"
-                                    " seconds.[/cyan]"
-                                )
-                                improved_code = (
-                                    response.choices[0].message.content.strip()
-                                )
-                                improved_code = clean_llm_response(
-                                    improved_code
-                                )  # Clean again
-                            except Timeout:
-                                console.print(
-                                    "[yellow]Timeout during syntax correction attempt"
-                                    f" {syntax_errors}.[/yellow]"
-                                )
-                                logging.warning(
-                                    "Timeout during syntax correction attempt %d",
-                                    syntax_errors,
-                                )
-                                if syntax_errors == MAX_SYNTAX_RETRIES:
-                                    console.print(
-                                        "[red]Max syntax correction attempts reached for"
-                                        f" {category}. Skipping.[/red]"
-                                    )
-                                    break  # Exit syntax retry loop
-                                continue  # Try again (if within max retries)
+    # If any improvements failed, restore from backup
+    if not total_success:
+        restore_backup(file_path, backup_path)
+        return current_code, False
 
-                    if syntax_errors == MAX_SYNTAX_RETRIES:
-                        console.print(
-                            "[red]Max syntax correction attempts reached for"
-                            f" {category}. Skipping.[/red]"
-                        )
-                        break  # Exit the LLM retry loop
+    # Write final improved code
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(current_code)
+    except Exception as e:
+        console.print(f"[red]Error writing improved code: {e}[/red]")
+        restore_backup(file_path, backup_path)
+        return current_code, False
 
-                    # If we get here, the code is (hopefully) syntactically correct
-                    with open(file_path, "w", encoding="utf-8") as f:
-                        f.write(improved_code)  # Write the improved code
-                    success = True  # Mark this category as successful
-                    break  # Exit the LLM retry loop
-
-                except Timeout:
-                    console.print(
-                        "[yellow]Timeout during LLM call for {category} (attempt"
-                        f" {attempt + 1}).[/yellow]"
-                    )
-                    logging.warning(
-                        "LLM request timed out for category: %s", category
-                    )
-                    if attempt < MAX_LLM_RETRIES - 1:
-                        time.sleep(2)  # Wait before retrying
-                    else:
-                        console.print(
-                            f"[red]Max LLM retries reached for {category}.[/red]"
-                        )
-                        success = False
-                        break  # Exit retry loop on max retries
-                except Exception as e:
-                    console.print(
-                        "[red]Error during LLM call for {category} (attempt"
-                        f" {attempt + 1}): {e}[/red]"
-                    )
-                    logging.exception(
-                        "Error during LLM call for category: %s", category
-                    )
-                    if attempt < MAX_LLM_RETRIES - 1:
-                        time.sleep(2)
-                    else:
-                        console.print(
-                            f"[red]Max LLM retries reached for {category}.[/red]"
-                        )
-                        success = False
-                        break  # Exit retry loop on max retries
-
-            if not success:
-                restore_backup(
-                    file_path, backup_path
-                )  # Restore from backup on failure
-                console.print(
-                    "[yellow]Restoring backup due to failure in {category}"
-                    " improvements.[/yellow]"
-                )
-                total_success = False  # Mark overall success as false
-
-            progress.update(improve_task, advance=1)
-
-    return (
-        improved_code,
-        total_success,
-    )  # Return improved code and success flag
+    return current_code, True
 
 
 def fix_tests(generated_tests: str, file_base_name: str) -> Tuple[str, bool]:
@@ -1089,7 +956,6 @@ def create_commit(
             "security": "🔒",
             "performance": "⚡",
             "testing": "🧪",
-            "documentation": "📚",
             "refactor": "♻️",
             "bugfix": "🐛",
             "feature": "✨",
@@ -1112,7 +978,6 @@ def create_commit(
 
 
         repo.index.commit(commit_message)
-        console.print(f"[green]Commit created:[/green] {commit_message}")
     except Exception as e:
         console.print(f"[red]Error creating commit:[/red] {e}")
         logging.exception("Error creating commit")
@@ -1391,7 +1256,7 @@ def main(
             exclude_tools.split(","),
             cache_dir,
             debug,
-            line_length,  # Pass line_length
+            line_length,  # Pass line length
         )
         console.print("[blue]Test generation phase...[/blue]")
         # Removed nested Progress block here to avoid multiple live displays
@@ -1586,7 +1451,9 @@ def main(
                             coverage_percentage = float(line.split()[-1].rstrip("%"))
                             body_lines.append(f"  - Code Coverage: {coverage_percentage:.2f}%")
                         except (ValueError, IndexError):
-                            pass
+                            body_lines.append("  - Code Coverage: Unable to parse coverage value")
+                        except Exception as e:
+                            logging.warning(f"Unexpected error parsing coverage: {e}")
             body_lines.append("") # Add empty line AFTER Test Results
 
 
