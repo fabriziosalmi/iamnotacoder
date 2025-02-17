@@ -7,7 +7,7 @@ import toml
 import click
 from openai import OpenAI, Timeout  # Import Timeout
 import shutil
-from fabgpt import (
+from iamnotacoder import (
     run_command,
     load_config,
     create_backup,
@@ -37,7 +37,7 @@ from github import GitHub
 import datetime  # Import datetime
 import json # Import json
 
-class TestFabGPT(unittest.TestCase):
+class Testiamnotacoder(unittest.TestCase):
     def setUp(self):
         """Set up a temporary directory for testing."""
         self.temp_dir = tempfile.mkdtemp()
@@ -239,7 +239,7 @@ class TestFabGPT(unittest.TestCase):
             load_config("nonexistent_config.toml")
         mock_exit.assert_called_once_with(1)
 
-    @patch("fabgpt.run_command")
+    @patch("iamnotacoder.run_command")
     @patch("os.path.exists", return_value=False)  # No cache
     @patch("shutil.which", return_value=True)
     def test_analyze_project(self, mock_which, mock_exists, mock_run_command):
@@ -257,7 +257,7 @@ class TestFabGPT(unittest.TestCase):
             self.assertIn(tool, results)  # Tool name exists
             self.assertEqual(results[tool]["returncode"], 0)  # Return code 0
 
-    @patch("fabgpt.run_command")
+    @patch("iamnotacoder.run_command")
     @patch("os.path.exists", return_value=False)
     @patch("shutil.which", side_effect=[True, False, True, True, True])  # Simulate flake8 not installed.
     def test_analyze_project_tool_not_found(self, mock_which, mock_exists, mock_run_command):
@@ -273,7 +273,7 @@ class TestFabGPT(unittest.TestCase):
         self.assertNotIn("flake8", results)  # Flake8 result is not present
 
 
-    @patch("fabgpt.run_command")
+    @patch("iamnotacoder.run_command")
     @patch("os.path.exists")  # Remove initial return_value
     @patch("shutil.which", return_value=True)
     @patch("builtins.open", new_callable=mock_open)
@@ -387,9 +387,9 @@ class TestFabGPT(unittest.TestCase):
         self.assertEqual(summary, {"documentation": ["Error retrieving improvements."]})
 
     @patch("openai.OpenAI")
-    @patch("fabgpt.create_backup", return_value="backup_path")
-    @patch("fabgpt.restore_backup")
-    @patch("fabgpt.clean_llm_response")
+    @patch("iamnotacoder.create_backup", return_value="backup_path")
+    @patch("iamnotacoder.restore_backup")
+    @patch("iamnotacoder.clean_llm_response")
     @patch("builtins.open", new_callable=mock_open, read_data="def hello():\n    print('Hello')")
     def test_generate_tests_timeout(self, mock_file, mock_openai):
         """Test test generation timeout."""
@@ -413,9 +413,9 @@ class TestFabGPT(unittest.TestCase):
         mock_client.chat.completions.create.assert_called_once()
 
     @patch("openai.OpenAI")
-    @patch("fabgpt.create_backup", return_value="backup_path")
-    @patch("fabgpt.restore_backup")
-    @patch("fabgpt.clean_llm_response")
+    @patch("iamnotacoder.create_backup", return_value="backup_path")
+    @patch("iamnotacoder.restore_backup")
+    @patch("iamnotacoder.clean_llm_response")
     @patch("builtins.open", new_callable=mock_open, read_data="def hello():\n    print('Hello')")  # Initial code
     def test_improve_file_syntax_error_recovery(self, mock_file, mock_clean, mock_restore, mock_backup, mock_openai):
         """Test recovery from syntax errors."""
@@ -456,9 +456,9 @@ class TestFabGPT(unittest.TestCase):
         mock_restore.assert_not_called()
 
     @patch("openai.OpenAI")
-    @patch("fabgpt.create_backup", return_value="backup_path")
-    @patch("fabgpt.restore_backup")
-    @patch("fabgpt.clean_llm_response", return_value = "invalid code")  # Always returns invalid code
+    @patch("iamnotacoder.create_backup", return_value="backup_path")
+    @patch("iamnotacoder.restore_backup")
+    @patch("iamnotacoder.clean_llm_response", return_value = "invalid code")  # Always returns invalid code
     @patch("builtins.open", new_callable=mock_open, read_data="def hello():\n    print('Hello')")  # Initial code
     def test_improve_file_max_syntax_retries(self, mock_file, mock_clean, mock_restore, mock_backup, mock_openai):
         """Test reaching maximum syntax correction retries."""
@@ -491,9 +491,9 @@ class TestFabGPT(unittest.TestCase):
 
 
     @patch("openai.OpenAI")
-    @patch("fabgpt.create_backup", return_value="backup_path")
-    @patch("fabgpt.restore_backup")
-    @patch("fabgpt.clean_llm_response", return_value="def hello():\n print('Hello')")  # return a correct code
+    @patch("iamnotacoder.create_backup", return_value="backup_path")
+    @patch("iamnotacoder.restore_backup")
+    @patch("iamnotacoder.clean_llm_response", return_value="def hello():\n print('Hello')")  # return a correct code
     @patch("builtins.open", new_callable=mock_open, read_data="def hello():\n    print('Hello')")  # Initial code
     def test_improve_file_llm_timeout(
         self, mock_file, mock_clean, mock_restore, mock_backup, mock_openai
@@ -525,9 +525,9 @@ class TestFabGPT(unittest.TestCase):
         mock_restore.assert_called_once_with(self.test_file, "backup_path")
 
     @patch("openai.OpenAI")
-    @patch("fabgpt.create_backup", return_value="backup_path")
-    @patch("fabgpt.restore_backup")
-    @patch("fabgpt.clean_llm_response", return_value="def hello():\n print('Hello')")
+    @patch("iamnotacoder.create_backup", return_value="backup_path")
+    @patch("iamnotacoder.restore_backup")
+    @patch("iamnotacoder.clean_llm_response", return_value="def hello():\n print('Hello')")
     @patch("builtins.open", new_callable=mock_open, read_data="def hello():\n    print('Hello')")  # Initial code
     def test_improve_file_llm_exception(self, mock_file, mock_clean, mock_restore, mock_backup, mock_openai):
         """Test generic LLM exception."""
@@ -573,7 +573,7 @@ class TestFabGPT(unittest.TestCase):
         self.assertIn("Syntax error in generated tests", fixed_tests)
 
     @patch("openai.OpenAI")
-    @patch("fabgpt.fix_tests")
+    @patch("iamnotacoder.fix_tests")
     @patch("builtins.open", new_callable=mock_open, read_data="def hello():\n    print('Hello')")  # Mock code
     def test_generate_tests_success(self, mock_file, mock_fix, mock_openai):
         """Test successful test generation."""
@@ -606,7 +606,7 @@ class TestFabGPT(unittest.TestCase):
 
 
     @patch("openai.OpenAI")
-    @patch("fabgpt.fix_tests")
+    @patch("iamnotacoder.fix_tests")
     @patch("builtins.open", new_callable=mock_open, read_data="def hello():\n    print('Hello')")
     def test_generate_tests_syntax_error_recovery(self, mock_file, mock_fix, mock_openai):
         """Test test generation with syntax error recovery."""
@@ -690,7 +690,7 @@ class TestFabGPT(unittest.TestCase):
         mock_client.chat.completions.create.assert_called_once()
 
 
-    @patch("fabgpt.run_command")
+    @patch("iamnotacoder.run_command")
     @patch("os.path.exists")
     def test_run_tests_success(self, mock_exists, mock_run_command):
         """Test successful test execution."""
@@ -701,7 +701,7 @@ class TestFabGPT(unittest.TestCase):
         self.assertEqual(test_results["returncode"], 0)
         mock_run_command.assert_called_once()
 
-    @patch("fabgpt.run_command")
+    @patch("iamnotacoder.run_command")
     @patch("os.path.exists")
     def test_run_tests_failure(self, mock_exists, mock_run_command):
         """Test failed test execution."""
@@ -712,7 +712,7 @@ class TestFabGPT(unittest.TestCase):
         self.assertEqual(test_results["returncode"], 1)
         mock_run_command.assert_called_once()
 
-    @patch("fabgpt.run_command")
+    @patch("iamnotacoder.run_command")
     @patch("os.path.exists")
     def test_run_tests_no_tests(self, mock_exists, mock_run_command):
         """Test case where no tests are found."""
@@ -734,7 +734,7 @@ class TestFabGPT(unittest.TestCase):
         self.assertEqual(test_results["errors"], "Tests directory not found")
 
 
-    @patch("fabgpt.run_command")
+    @patch("iamnotacoder.run_command")
     @patch("os.path.exists")
     def test_run_tests_unsupported_framework(self, mock_exists, mock_run):
         """Test using an unsupported test framework."""
@@ -797,7 +797,7 @@ class TestFabGPT(unittest.TestCase):
         create_commit(self.mock_repo, self.test_file, "Test commit message")
         #self.assertEqual(cm.exception.code, 1) # Removed
 
-    @patch("fabgpt.GitHub")  # Patch within fabgpt
+    @patch("iamnotacoder.GitHub")  # Patch within iamnotacoder
     def test_create_pull_request(self, mock_github_class):
         """Test creating a pull request."""
         mock_github = MagicMock()
@@ -837,7 +837,7 @@ class TestFabGPT(unittest.TestCase):
         args, kwargs = mock_repo.create_pull.call_args
         self.assertEqual(kwargs["head"], "testuser:improvement-branch")
 
-    @patch("fabgpt.GitHub")  # Patch within fabgpt
+    @patch("iamnotacoder.GitHub")  # Patch within iamnotacoder
     def test_create_pull_request_error(self, mock_github_class):
         """Test error handling during PR creation."""
         mock_github = MagicMock()
