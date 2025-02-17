@@ -1,0 +1,1 @@
+Provide a description for the following design asset needed for the application: {asset_description}

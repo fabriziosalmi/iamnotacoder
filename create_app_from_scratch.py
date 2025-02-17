@@ -98,6 +98,7 @@ def get_cli_config_priority(ctx: click.Context, param: click.Parameter, value: A
 
 def extract_code_from_response(response_text: str) -> str:
     """Extracts code from LLM responses, handling Markdown code blocks and inline code."""
+    print(f"RAW LLM RESPONSE: {response_text}")  # Add this line
     code_blocks = re.findall(r"```(?:[a-zA-Z]+)?\n(.*?)\n```", response_text, re.DOTALL)
     if code_blocks:
         return code_blocks[-1].strip()

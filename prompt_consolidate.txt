@@ -1,0 +1,2 @@
+Consolidate this feedbacks:
+{feedback_list}
