@@ -1132,122 +1132,68 @@ def create_pull_request(
     """Creates a GitHub Pull Request."""
     try:
         console.print(f"[blue]Creating Pull Request...[/blue]")
-        # Correct GitHub initialization
-        g = Github(token)  # Initialize with token directly
-        
-        repo_name = repo_url.replace(
-            "https://github.com/", ""
-        )  # Extract repo name
+        g = Github(token)
+        repo_name = repo_url.replace("https://github.com/", "")
         repo = g.get_repo(repo_name)
+        
+        # Define category icons
+        category_icons = {
+            "changes": "✨",
+            "static_analysis": "⚠️",
+            "style": "🎨",
+            "maintenance": "🛠️",
+            "security": "🔒",
+            "performance": "⚡",
+            "testing": "🧪",
+            "documentation": "📚",
+            "refactor": "♻️",
+            "bugfix": "🐛",
+            "feature": "✨"
+        }
+        
+        # Extract the commit message components
+        commit_lines = commit_message.split('\n\n')
+        pr_title = commit_lines[0]
+        
+        # Construct PR body with rich formatting
+        body = f"## {os.path.basename(file_path)} Improvements\n\n"
+        
+        # Add commit message content with preserved formatting and icons
+        for section in commit_lines[1:]:
+            # Changes Made section
+            if "Changes Made:" in section:
+                body += f"{category_icons['changes']} " + section.replace("**Changes Made:**", "**Changes Made:**") + "\n\n"
+            
+            # Static Analysis section
+            elif "Static Analysis" in section:
+                body += f"{category_icons['static_analysis']} " + section.replace("**Static Analysis", "**Static Analysis") + "\n\n"
+            
+            # Category-specific improvements
+            elif any(f"{cat.capitalize()} Improvements:" in section for cat in categories):
+                for cat in categories:
+                    if f"{cat.capitalize()} Improvements:" in section:
+                        icon = category_icons.get(cat.lower(), "✨")
+                        body += f"{icon} " + section + "\n\n"
+                        break
+            
+            # Test Results section
+            elif "Test Results:" in section:
+                body += f"{category_icons['testing']} " + section + "\n\n"
 
-        # Get the user's login (username)
-        user = g.get_user()
-        username = user.login
-
-        # Namespace the head branch
-        namespaced_head = f"{username}:{head_branch}"
-
-        # Construct the PR body
-        body = (
-            f"## Pull Request: Improvements to {os.path.basename(file_path)}\n\n"
-        )
-        body += (
-            f"**Categories Improved:** {', '.join(categories)}\n\n"
-        )  # Add categories
-        body += "Changes made:\n\n"
-        body += "* Code formatting with Black and isort (if installed).\n"
-        body += (
-            f"* Improvements suggested by LLM (level: {optimization_level}).\n"
-        )
-        # Indicate if tests were added/updated
-        if test_results and test_results.get("returncode", 1) == 0:  # Check for test success
-            body += "* Added/Updated unit tests.\n"
-
-        # Include static analysis results in the PR body
-        if analysis_results:
-            table = Table(title="Static Analysis Results")
-            table.add_column("Tool", style="cyan")
-            table.add_column("Result", style="magenta")
-            for tool, result in analysis_results.items():
-                # Show green for OK, red for errors, yellow for skipped
-                outcome = (
-                    "[green]OK[/green]"
-                    if result["returncode"] == 0
-                    else f"[red]Errors/Warnings ({len(result.get('output', '').splitlines())})[/red]"
-                    if "returncode" in result
-                    else "[yellow]Skipped[/yellow]"
-                )
-                table.add_row(tool, outcome)
-            body += "\n" + str(table) + "\n"
-
-        # Include test results and coverage information
-        if test_results:
-            test_outcome = (
-                "[green]Passed[/green]"
-                if test_results["returncode"] == 0
-                else f"[red]Failed[/red]"
-            )  # Show test result
-            body += f"\n| Tests | {test_outcome} |\n"
-
-            # Extract and report coverage, if available
-            if "TOTAL" in test_results.get("output", ""):
-                for line in test_results.get("output").splitlines():
-                    if line.lstrip().startswith("TOTAL"):
-                        try:
-                            coverage_percentage = float(
-                                line.split()[-1].rstrip("%")
-                            )
-                            body += (
-                                f"\n**Code Coverage:** {coverage_percentage:.2f}%\n"
-                            )
-                            # Check against minimum coverage and add warning/error
-                            if min_coverage and coverage_percentage < min_coverage:
-                                if coverage_fail_action == "warn":
-                                    body += (
-                                        "\n**[WARNING] Coverage is below the minimum"
-                                        f" threshold! ({min_coverage}%)**\n"
-                                    )
-                                else:  # fail
-                                    body += (
-                                        "\n**[ERROR] Coverage is below the minimum"
-                                        f" threshold! ({min_coverage}%)**\n"
-                                    )
-
-                        except (ValueError, IndexError):
-                            pass  # Ignore lines that don't have coverage
-
-            if test_results["returncode"] != 0:  # Show message is tests failed
-                body += (
-                    "\n**[WARNING] Some tests failed!  Check the CI results for"
-                    " details.**\n"
-                )
-
-        # Add instructions on how to run tests manually
-        body += "\n---\n\nTo run tests manually:\n\n```bash\n"
-        if test_framework == "pytest":
-            rel_path = os.path.dirname(os.path.relpath(file_path, repo_path))
-            body += (
-                "pytest -v --cov={rel_path} --cov-report term-missing\n"  # Show how to run
-            )
-        elif test_framework == "unittest":  # Added basic unittest support
-            body += "python -m unittest discover\n"
-        body += "```"
-
-        # Create the Pull Request
+        # Create the PR
         pr = repo.create_pull(
-            title=commit_message
-            if commit_message
-            else "Refactor: Automatic improvements",  # Use custom message or default
+            title=pr_title,
             body=body,
-            head=namespaced_head,  # Use the namespaced head
-            base=base_branch,  # Target branch
+            head=f"{g.get_user().login}:{head_branch}",
+            base=base_branch
         )
+        
         console.print(f"[green]Pull Request created:[/green] {pr.html_url}")
-
+        
     except Exception as e:
         console.print(f"[red]Error creating Pull Request:[/red] {e}")
         logging.exception("Error creating Pull Request")
-        exit(1)  # Exit on PR creation failure
+        exit(1)
 
 
 @click.command()
