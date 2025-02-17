@@ -1,21 +1,21 @@
-# ✨ FabGPT: Automated Python Code Improvement and Generation Suite 🚀
+# ✨ iamnotacoder: Automated Python Code Improvement and Generation
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/release/python-370/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-FabGPT is a powerful toolkit, fueled by Large Language Models (LLMs), that automates the process of improving and generating Python code. It's designed to be flexible, robust, and easy to integrate into your workflow. The suite includes:
+iamnotacoder is a powerful toolkit, fueled by Large Language Models (LLMs), that automates the process of improving and generating Python code. It's designed to be flexible, robust, and easy to integrate into your workflow. The suite includes:
 
-*   **`fabgpt.py` (The Optimizer 🛠️):** Your primary tool for enhancing existing Python code within GitHub repositories.  It combines static analysis, LLM-powered refactoring, automated testing, and seamless GitHub integration (including safe forking).
+*   **`iamnotacoder.py` (The Optimizer 🛠️):** Your primary tool for enhancing existing Python code within GitHub repositories.  It combines static analysis, LLM-powered refactoring, automated testing, and seamless GitHub integration (including safe forking).
 *   **`scraper.py` (The Finder 🔍):** Discovers and filters Python repositories on GitHub based on your criteria (e.g., code quality, lines of code, update date).
-*   **`process.py` (The Orchestrator ⚙️):** Automates the execution of `fabgpt.py` on multiple repositories identified by `scraper.py`.
+*   **`process.py` (The Orchestrator ⚙️):** Automates the execution of `iamnotacoder.py` on multiple repositories identified by `scraper.py`.
 *   **`create_app_from_scratch.py` (The Creator 🏗️):** A code generation tool that builds basic Python applications from natural language descriptions. It leverages a team of specialized LLM "actors" to handle different development tasks.
 
-This README focuses primarily on `fabgpt.py` (the optimizer) and provides an overview of `create_app_from_scratch.py` (the creator).
+This README focuses primarily on `iamnotacoder.py` (the optimizer) and provides an overview of `create_app_from_scratch.py` (the creator).
 
 ## 📑 Table of Contents
 
-1.  [I. `fabgpt.py`: The Code Optimizer 🛠️](#i-fabgptpy-the-code-optimizer-)
+1.  [I. `iamnotacoder.py`: The Code Optimizer 🛠️](#i-iamnotacoderpy-the-code-optimizer-)
     *   [Overview](#overview)
     *   [Features](#features-optimizer)
     *   [Installation](#installation-optimizer)
@@ -36,11 +36,11 @@ This README focuses primarily on `fabgpt.py` (the optimizer) and provides an ove
 5.  [Contributing 🤝](#contributing-)
 6.  [License 📜](#license-)
 
-## I. `fabgpt.py`: The Code Optimizer 🛠️
+## I. `iamnotacoder.py`: The Code Optimizer 🛠️
 
 ### Overview
 
-`fabgpt.py` is your go-to tool for automatically improving the quality of existing Python code. It's designed to be a comprehensive solution for:
+`iamnotacoder.py` is your go-to tool for automatically improving the quality of existing Python code. It's designed to be a comprehensive solution for:
 
 *   **Enhancing Code Style and Readability:** Makes your code more consistent, readable, and maintainable.
 *   **Identifying and Fixing Potential Issues:** Detects potential bugs, security vulnerabilities, and performance bottlenecks.
@@ -93,8 +93,8 @@ This README focuses primarily on `fabgpt.py` (the optimizer) and provides an ove
 1.  **Clone the Repository:**
 
     ```bash
-    git clone <your_fabgpt_repo_url>
-    cd FabGPT
+    git clone <your_iamnotacoder_repo_url>
+    cd iamnotacoder
     ```
 
 2.  **Install Dependencies:**
@@ -121,7 +121,7 @@ This README focuses primarily on `fabgpt.py` (the optimizer) and provides an ove
 **Basic Command Structure:**
 
 ```bash
-python fabgpt.py --repo <repository_url> --files <file_paths> --branch <target_branch> --token <github_token> [options]
+python iamnotacoder.py --repo <repository_url> --files <file_paths> --branch <target_branch> --token <github_token> [options]
 ```
 
 **Required Arguments:**
@@ -195,19 +195,19 @@ Write test for {file_base_name}.py file:
 1.  **Basic Usage (with a configuration file):**
 
     ```bash
-    python fabgpt.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN -c config.toml
+    python iamnotacoder.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN -c config.toml
     ```
 
 2.  **Dry Run with Debug Logging:**
 
     ```bash
-    python fabgpt.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN --dry-run --debug
+    python iamnotacoder.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN --dry-run --debug
     ```
 
 3.  **Using a Local LLM with LM Studio:**
 
     ```bash
-    python fabgpt.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN --openai-api-base http://localhost:1234/v1 --llm-model qwen2.5-coder-14b-instruct-mlx
+    python iamnotacoder.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN --openai-api-base http://localhost:1234/v1 --llm-model qwen2.5-coder-14b-instruct-mlx
     ```
 
     (and set `openai_api_key = "none"` in `config.toml`)
@@ -215,13 +215,13 @@ Write test for {file_base_name}.py file:
 4.  **Forking and Automatically Generating Tests:**
 
     ```bash
-    python fabgpt.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN --fork-repo --fork-user yourusername
+    python iamnotacoder.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN --fork-repo --fork-user yourusername
     ```
 
 5.  **Running on Multiple Files and exclude mypy tool:**
 
     ```bash
-    python fabgpt.py --repo https://github.com/user/repo --files "src/module1.py,src/module2.py,tests/test_module1.py" --branch development --token YOUR_GITHUB_TOKEN --exclude-tools mypy --fork-repo
+    python iamnotacoder.py --repo https://github.com/user/repo --files "src/module1.py,src/module2.py,tests/test_module1.py" --branch development --token YOUR_GITHUB_TOKEN --exclude-tools mypy --fork-repo
     ```
 
 ### Workflow (Optimizer)
@@ -245,7 +245,7 @@ Write test for {file_base_name}.py file:
 
 `scraper.py` is a script engineered to locate and sift through Python repositories on GitHub based on a set of criteria you define. These criteria can include aspects like the number of lines of code in the files, the ratio of comments to code (an indicator of code quality), and the last update date of the repository.  It outputs a JSON file containing a list of repositories and files that meet your criteria.
 
-The `process.py` script acts as a conductor, efficiently running `fabgpt.py` across a multitude of Python repositories. These repositories are typically discovered using `scraper.py`, making the process streamlined and automated.  It reads the JSON output from `scraper.py` and runs `fabgpt.py` on each identified repository and file.
+The `process.py` script acts as a conductor, efficiently running `iamnotacoder.py` across a multitude of Python repositories. These repositories are typically discovered using `scraper.py`, making the process streamlined and automated.  It reads the JSON output from `scraper.py` and runs `iamnotacoder.py` on each identified repository and file.
 
 ### Usage (scraper and process)
 
@@ -262,7 +262,7 @@ The `process.py` script acts as a conductor, efficiently running `fabgpt.py` acr
     python process.py --input output.json --token YOUR_GITHUB_TOKEN --config config.toml --branch main --output results.json --fork
     ```
 
-    This command reads the `output.json` file (generated by `scraper.py`), uses your GitHub token, applies the settings from `config.toml`, targets the `main` branch, saves the processing results to `results.json`, and forks each repository before making changes. It effectively automates running `fabgpt.py` on the repositories and files found by the scraper.
+    This command reads the `output.json` file (generated by `scraper.py`), uses your GitHub token, applies the settings from `config.toml`, targets the `main` branch, saves the processing results to `results.json`, and forks each repository before making changes. It effectively automates running `iamnotacoder.py` on the repositories and files found by the scraper.
 
 ## III. `create_app_from_scratch.py`: The Application Creator 🏗️
 
