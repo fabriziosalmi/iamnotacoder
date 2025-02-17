@@ -351,18 +351,25 @@ def clean_llm_response(response_text: str) -> str:
             cleaned_lines.append(line)
     return "\n".join(cleaned_lines).strip()
 
-
-
 def format_llm_summary(improvements_summary: Dict[str, List[str]]) -> str:
-    """Formats the LLM improvement summary into a readable string."""
+    """Formats the LLM improvement summary, deduplicating improvements."""
     formatted_summary = ""
+    unique_improvements = set()  # Use a set for deduplication
+
     for category, improvements in improvements_summary.items():
         if improvements and improvements != ["Error retrieving improvements."]:
-            formatted_summary += f"\n**{category.capitalize()} Improvements:**\n"
             for improvement in improvements:
-                formatted_summary += f"- {improvement}\n"
-    return formatted_summary
+                # Add to the set (automatically handles duplicates)
+                unique_improvements.add(improvement)
 
+    # Build the formatted string from the unique improvements
+    if unique_improvements:
+        for improvement in unique_improvements:
+            formatted_summary += f"- {improvement}\n"
+    else:
+        formatted_summary = "No LLM-driven improvements were made.\n"
+
+    return formatted_summary
 
 def get_llm_improvements_summary(
     original_code: str,
@@ -425,9 +432,6 @@ def get_llm_improvements_summary(
             improvements_summary[category] = ["Error retrieving improvements."]
 
     return improvements_summary
-
-
-
 
 def improve_file(
     file_path: str,
@@ -785,6 +789,7 @@ def generate_tests(
         )  # Print the code for debugging
         return ""
 
+
 def run_tests(
     repo_path: str,
     original_file_path: str,
@@ -978,6 +983,19 @@ def create_commit(
         logging.exception("Error creating commit")
         exit(1)
 
+def format_for_commit_and_pr(file_improvements: Dict[str, str]) -> Tuple[str, str]:
+    """Formats improvements for commit message (title and body) and PR body."""
+    
+    # Title:  Concise, mentioning all files.
+    title = f"Improved: {', '.join(file_improvements.keys())}"
+
+    # Body:  Detailed, per-file breakdown.
+    body = ""
+    for filename, formatted_summary in file_improvements.items():
+        body += f"## Improvements for {filename}:\n\n"
+        body += formatted_summary + "\n"
+
+    return title, body
 
 def create_pull_request(
     repo_obj: git.Repo,
@@ -985,15 +1003,16 @@ def create_pull_request(
     token: str,
     base_branch: str,
     head_branch: str,
-    commit_message: str,
+    commit_title: str,  # Now separate title
+    commit_body: str,   # and body
     analysis_results: Dict[str, Dict[str, Any]],
     test_results: Dict[str, Any],
-    file_paths: List[str],  # Now accepts a list of file paths
+    file_paths: List[str],
     optimization_level: str,
     test_framework: str,
     min_coverage: float,
     coverage_fail_action: str,
-    repo_path: str,  # Keep this if you need it for other logic
+    repo_path: str,
     categories: List[str],
     debug: bool = False,
     force_push: bool = False,
@@ -1017,21 +1036,11 @@ def create_pull_request(
             logging.exception("Error pushing branch")
             exit(1)
 
-        # Extract commit message components (assuming first line is title)
-        commit_lines = commit_message.split('\n\n', 1)  # Split only on the first double newline
-        pr_title = commit_lines[0]
-        pr_body = commit_lines[1] if len(commit_lines) > 1 else ""
-
-
-        # Construct PR body
-        body = f"## Improvements for: {', '.join(file_paths)}\n\n"
-        body += pr_body  # Add the rest of the commit message as the body
-
-        # Create the PR
+        # Create the PR using the PyGithub repo object
         pr = gh_repo.create_pull(
-            title=pr_title,
-            body=body,
-            head=f"{g.get_user().login}:{head_branch}",
+            title=commit_title,  # Use the separate title
+            body=commit_body,    # Use the separate body
+            head=f"{g.get_user().login}:{head_branch}",  # Correct head format
             base=base_branch
         )
 
@@ -1354,14 +1363,12 @@ def main(
                 llm_model,
                 llm_temperature,
             )
-            formatted_summary = format_llm_summary(llm_improvements_summary)
+            formatted_summary = format_llm_summary(llm_improvements_summary)  # Deduplicated summary
         else:
             formatted_summary = "No LLM-driven improvements were made."
 
-        # --- Build Commit Message (per file) ---
-        file_commit_message = f"Improved {file}:\n{formatted_summary}\n"
-        final_commit_message += file_commit_message  # Append to overall message
-        improved_files_info[file] = file_commit_message
+        improved_files_info[file] = formatted_summary # Store the formatted summary
+
 
         # --- Save Improved Code (if requested) ---
         if output_file:
@@ -1394,7 +1401,9 @@ def main(
 
     # --- Commit and Pull Request (outside the file loop) ---
     if not dry_run:
-      create_commit(repo_obj, files_list, final_commit_message, test_results)
+      # Format for commit and PR
+      commit_title, commit_body = format_for_commit_and_pr(improved_files_info)
+      create_commit(repo_obj, files_list, f"{commit_title}\n\n{commit_body}", test_results) # combine title and body
       if not local_commit:
           create_pull_request(
               repo_obj,
@@ -1402,7 +1411,8 @@ def main(
               token,
               branch,
               new_branch_name,
-              final_commit_message,
+              commit_title,  # Pass the title
+              commit_body,   # Pass the body
               final_analysis_results,
               test_results,
               files_list,
