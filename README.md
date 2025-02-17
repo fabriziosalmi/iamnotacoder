@@ -1,17 +1,17 @@
-# ✨ FabGPT: Automated Python Code Improvement and Generation
+# ✨ FabGPT: Automated Python Code Improvement and Generation Suite 🚀
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/release/python-370/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-FabGPT is a powerful toolkit, fueled by Large Language Models (LLMs), that automates the process of improving and generating Python code. It's designed to be flexible, robust, and easy to integrate into your workflow.  The suite includes:
+FabGPT is a powerful toolkit, fueled by Large Language Models (LLMs), that automates the process of improving and generating Python code. It's designed to be flexible, robust, and easy to integrate into your workflow. The suite includes:
 
-*   **`fabgpt.py` (The Optimizer 🛠️):**  Your primary tool for enhancing existing Python code within GitHub repositories. It combines static analysis, LLM-powered refactoring, automated testing, and seamless GitHub integration (including safe forking).
-*   **`create_app_from_scratch.py` (The Creator 🏗️):**  A code generation tool that builds basic Python applications from natural language descriptions.  It leverages a team of specialized LLM "actors" to handle different development tasks.
-*   **`scraper.py` (The Finder 🔍):**  Discovers and filters Python repositories on GitHub based on your criteria (e.g., code quality, lines of code, update date).
-*   **`process.py` (The Orchestrator ⚙️):**  Automates the execution of `fabgpt.py` on multiple repositories identified by `scraper.py`.
+*   **`fabgpt.py` (The Optimizer 🛠️):** Your primary tool for enhancing existing Python code within GitHub repositories.  It combines static analysis, LLM-powered refactoring, automated testing, and seamless GitHub integration (including safe forking).
+*   **`scraper.py` (The Finder 🔍):** Discovers and filters Python repositories on GitHub based on your criteria (e.g., code quality, lines of code, update date).
+*   **`process.py` (The Orchestrator ⚙️):** Automates the execution of `fabgpt.py` on multiple repositories identified by `scraper.py`.
+*   **`create_app_from_scratch.py` (The Creator 🏗️):** A code generation tool that builds basic Python applications from natural language descriptions. It leverages a team of specialized LLM "actors" to handle different development tasks.
 
-This README focuses primarily on `fabgpt.py` (the optimizer) and provides an overview of `create_app_from_scratch.py` (the creator), `scraper.py` and `process.py`.
+This README focuses primarily on `fabgpt.py` (the optimizer) and provides an overview of `create_app_from_scratch.py` (the creator).
 
 ## 📑 Table of Contents
 
@@ -24,14 +24,14 @@ This README focuses primarily on `fabgpt.py` (the optimizer) and provides an ove
     *   [Custom Prompts](#custom-prompts)
     *   [Examples](#examples-optimizer)
     *   [Workflow](#workflow-optimizer)
-2.  [II. `create_app_from_scratch.py`: The Application Creator 🏗️](#ii-create_app_from_scratchpy-the-application-creator-)
-    *   [Overview](#overview-1)
+2.  [II. `scraper.py` and `process.py`: The Finder and Orchestrator 🔍⚙️](#ii-scraperpy-and-processpy-the-finder-and-orchestrator-)
+    *    [Overview](#overview-1)
+    *    [Usage](#usage-scraper-and-process)
+3.  [III. `create_app_from_scratch.py`: The Application Creator 🏗️](#iii-create_app_from_scratchpy-the-application-creator-)
+    *   [Overview](#overview-2)
     *   [Usage](#usage-creator)
     *   [Example Prompts](#example-prompts-creator)
     *   [Example](#example-creator)
-3. [III.  `scraper.py` and `process.py`: The Finder and Orchestrator 🔍⚙️](#iii-scraperpy-and-processpy-the-finder-and-orchestrator-)
-     *    [Overview](#overview-2)
-     *    [Usage](#usage-scraper-and-process)
 4.  [Troubleshooting 🐛](#troubleshooting-)
 5.  [Contributing 🤝](#contributing-)
 6.  [License 📜](#license-)
@@ -40,12 +40,12 @@ This README focuses primarily on `fabgpt.py` (the optimizer) and provides an ove
 
 ### Overview
 
-`fabgpt.py` is your go-to tool for automatically improving the quality of existing Python code.  It's designed to be a comprehensive solution for:
+`fabgpt.py` is your go-to tool for automatically improving the quality of existing Python code. It's designed to be a comprehensive solution for:
 
-*   **Enhancing Code Style and Readability:**  Makes your code more consistent, readable, and maintainable.
-*   **Identifying and Fixing Potential Issues:**  Detects potential bugs, security vulnerabilities, and performance bottlenecks.
-*   **Generating and Running Tests:**  Helps you increase test coverage and ensure code correctness.
-*   **Integrating with GitHub:**  Streamlines your workflow by automating the process of cloning, branching, committing, and creating pull requests (with safe forking).
+*   **Enhancing Code Style and Readability:** Makes your code more consistent, readable, and maintainable.
+*   **Identifying and Fixing Potential Issues:** Detects potential bugs, security vulnerabilities, and performance bottlenecks.
+*   **Generating and Running Tests:** Helps you increase test coverage and ensure code correctness.
+*   **Integrating with GitHub:** Streamlines your workflow by automating the process of cloning, branching, committing, and creating pull requests (with safe forking).
 
 ### Features (Optimizer)
 
@@ -77,16 +77,16 @@ This README focuses primarily on `fabgpt.py` (the optimizer) and provides an ove
     *   Supports configuration via TOML files for easy setup.
     *   Command-line options override configuration file settings.
 *   **✨ Other Key Features:**
-    *   **Dry Run Mode:**  Performs all analysis and improvement steps, but doesn't commit, push, or create pull requests.
-    *   **Local Commit Mode:**  Makes changes and commits locally, but skips pull request creation.
-    *   **Customizable LLM Prompts:**  Tailor the LLM's behavior with custom prompts for different improvement categories (style, maintenance, security, performance, and tests).
+    *   **Dry Run Mode:** Performs all analysis and improvement steps, but doesn't commit, push, or create pull requests.
+    *   **Local Commit Mode:** Makes changes and commits locally, but skips pull request creation.
+    *   **Customizable LLM Prompts:** Tailor the LLM's behavior with custom prompts for different improvement categories (style, maintenance, security, performance, and tests).
     *   **Comprehensive Reports:** Generates detailed text and JSON reports summarizing changes, analysis results, and test outcomes.
-    *   **Robust Error Handling:**  Includes extensive error handling and informative error messages.
-    *   **Progress Indicators:**  Provides visual progress bars and console output using the `rich` library.
-    *   **Fast Mode:**  Reduces delays for faster execution (useful for quick checks).
-    *   **Local LLM Support:**  Integrates with local LLMs (e.g., LM Studio) via the OpenAI API.
-    *   **Configurable Line Length:**  Enforces a maximum line length (defaults to the PEP 8 standard of 79 characters).
-    *   **Output File Options:**  Save modified files to a different path than the original.
+    *   **Robust Error Handling:** Includes extensive error handling and informative error messages.
+    *   **Progress Indicators:** Provides visual progress bars and console output using the `rich` library.
+    *   **Fast Mode:** Reduces delays for faster execution (useful for quick checks).
+    *   **Local LLM Support:** Integrates with local LLMs (e.g., LM Studio) via the OpenAI API.
+    *   **Configurable Line Length:** Enforces a maximum line length (defaults to the PEP 8 standard of 79 characters).
+    *   **Output File Options:** Save modified files to a different path than the original.
 
 ### Installation (Optimizer)
 
@@ -136,8 +136,8 @@ python fabgpt.py --repo <repository_url> --files <file_paths> --branch <target_b
 *   `--config` (`-c`): ⚙️ Path to a TOML configuration file.
 *   `--tools` (`-T`): 🛠️ Comma-separated list of static analysis tools to use (default: `black,isort,pylint,flake8,mypy`).
 *   `--exclude-tools` (`-e`): ❌ Comma-separated list of tools to exclude.
-*   `--llm-model` (`-m`): 🧠 The LLM model to use (default: `qwen2.5-coder-14b-instruct-mlx`).  Supports both OpenAI and local LLM models.
-*   `--llm-temperature` (`-temp`): 🔥 The temperature for the LLM (default: 0.2).  Higher values increase randomness.
+*   `--llm-model` (`-m`): 🧠 The LLM model to use (default: `qwen2.5-coder-14b-instruct-mlx`). Supports both OpenAI and local LLM models.
+*   `--llm-temperature` (`-temp`): 🔥 The temperature for the LLM (default: 0.2). Higher values increase randomness.
 *   `--llm-custom-prompt` (`-p`): 📝 Path to a directory containing your custom prompt files (e.g., `prompt_style.txt`).
 *   `--min-coverage` (`-c`): 📊 Minimum code coverage threshold (as a percentage).
 *   `--no-dynamic-analysis`: 🚫 Disable test generation and execution.
@@ -167,13 +167,13 @@ coverage_fail_action = "warn"
 
 ### Custom Prompts
 
-To customize the LLM's behavior, create a directory (default: `.`) and place text files named `prompt_<category>.txt` within it.  Use `{code}` as a placeholder for the code to be improved, and `{file_base_name}` for the file base name.
+To customize the LLM's behavior, create a directory (default: `.`) and place text files named `prompt_<category>.txt` within it. Use `{code}` as a placeholder for the code to be improved, and `{file_base_name}` for the file base name.
 
 Example (`prompt_style.txt`):
 
 ```
 You are a coding assistant tasked with improving the style of the following Python code.
-Focus on PEP 8 compliance, readability, and clarity.  Return only the improved code,
+Focus on PEP 8 compliance, readability, and clarity. Return only the improved code,
 without any introductory or concluding text. Do not include markdown code fences.
 
 {code}
@@ -183,8 +183,8 @@ Example (`prompt_tests.txt`):
 
 ```
 You are a coding assistant tasked with writing test for the following Python code.
-Focus on  readability, and clarity.  Return only the test code,
-without any introductory or concluding text.  Do not include markdown code fences.
+Focus on readability, and clarity. Return only the test code,
+without any introductory or concluding text. Do not include markdown code fences.
 Write test for {file_base_name}.py file:
 
 {code}
@@ -209,6 +209,7 @@ Write test for {file_base_name}.py file:
     ```bash
     python fabgpt.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN --openai-api-base http://localhost:1234/v1 --llm-model qwen2.5-coder-14b-instruct-mlx
     ```
+
     (and set `openai_api_key = "none"` in `config.toml`)
 
 4.  **Forking and Automatically Generating Tests:**
@@ -216,15 +217,11 @@ Write test for {file_base_name}.py file:
     ```bash
     python fabgpt.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN --fork-repo --fork-user yourusername
     ```
+
 5.  **Running on Multiple Files and exclude mypy tool:**
 
     ```bash
     python fabgpt.py --repo https://github.com/user/repo --files "src/module1.py,src/module2.py,tests/test_module1.py" --branch development --token YOUR_GITHUB_TOKEN --exclude-tools mypy --fork-repo
-    ```
-6. **Using scraper.py and process.py:**
-    ```bash
-    python scraper.py --token YOUR_GITHUB_TOKEN --max-repos 10 --quality-threshold 50 --output output.json
-    python process.py --input output.json --token YOUR_GITHUB_TOKEN --config config.toml --branch main --output results.json --fork
     ```
 
 ### Workflow (Optimizer)
@@ -232,9 +229,9 @@ Write test for {file_base_name}.py file:
 1.  **Clone:** 🐙 The repository is cloned (using a shallow clone) to a temporary directory.
 2.  **Branch:** 🌿 A new branch is created with a unique, descriptive name.
 3.  **Static Analysis:** 🔍 The selected static analysis tools are run, and the results are cached (if `--cache-dir` is specified).
-4.  **Test Generation (Optional):** 🧪 If enabled (`--no-dynamic-analysis` is *not* set), tests are generated using the LLM.  Syntax errors are automatically corrected.
+4.  **Test Generation (Optional):** 🧪 If enabled (`--no-dynamic-analysis` is *not* set), tests are generated using the LLM. Syntax errors are automatically corrected.
 5.  **Test Execution (Optional):** 🚦 Tests are run, and code coverage is checked if `--min-coverage` is specified.
-6.  **LLM Improvement:** 🧠 The LLM is used to improve the code, guided by custom prompts.  Retries are performed if necessary.
+6.  **LLM Improvement:** 🧠 The LLM is used to improve the code, guided by custom prompts. Retries are performed if necessary.
 7.  **Change Verification:** ✅ The script checks if any actual code changes were made.
 8.  **Commit:** 💾 Changes (including generated tests) are committed to the new branch.
 9.  **Push:** 🚀 The new branch is pushed to the remote repository (your fork, if `--fork-repo` is used).
@@ -242,17 +239,42 @@ Write test for {file_base_name}.py file:
 11. **Reporting:** 📝 A text report (`report.txt` or as specified by `--output-info`) and a JSON log file are generated.
 12. **Cleanup:** 🧹 The temporary directory is removed (unless `--debug` is enabled).
 
-## II. `create_app_from_scratch.py`: The Application Creator 🏗️
+## II. `scraper.py` and `process.py`: The Finder and Orchestrator 🔍⚙️
 
 ### Overview
 
-`create_app_from_scratch.py` is your AI-powered coding assistant for generating basic Python applications from scratch.  It leverages a team of specialized LLM "actors," each with a specific role:
+`scraper.py` is a script engineered to locate and sift through Python repositories on GitHub based on a set of criteria you define. These criteria can include aspects like the number of lines of code in the files, the ratio of comments to code (an indicator of code quality), and the last update date of the repository.  It outputs a JSON file containing a list of repositories and files that meet your criteria.
 
-*   **Backend Developer 🧠:**  Creates the core application logic, typically generating a `backend.py` file.
+The `process.py` script acts as a conductor, efficiently running `fabgpt.py` across a multitude of Python repositories. These repositories are typically discovered using `scraper.py`, making the process streamlined and automated.  It reads the JSON output from `scraper.py` and runs `fabgpt.py` on each identified repository and file.
+
+### Usage (scraper and process)
+
+1.  **Run the Scraper:**
+
+    ```bash
+    python scraper.py --token YOUR_GITHUB_TOKEN --max-repos 10 --quality-threshold 50 --output output.json
+    ```
+    This command searches for up to 10 repositories, includes Python files with a "quality score" (lines of code in this example) of 50 or less, and saves the results to `output.json`.  You can adjust parameters like `--min-lines`, `--max-lines`, `--start-date`, and `--end-date` to refine your search.
+
+2.  **Process the Results with process.py:**
+
+    ```bash
+    python process.py --input output.json --token YOUR_GITHUB_TOKEN --config config.toml --branch main --output results.json --fork
+    ```
+
+    This command reads the `output.json` file (generated by `scraper.py`), uses your GitHub token, applies the settings from `config.toml`, targets the `main` branch, saves the processing results to `results.json`, and forks each repository before making changes. It effectively automates running `fabgpt.py` on the repositories and files found by the scraper.
+
+## III. `create_app_from_scratch.py`: The Application Creator 🏗️
+
+### Overview
+
+`create_app_from_scratch.py` is your AI-powered coding assistant for generating basic Python applications from scratch. It leverages a team of specialized LLM "actors," each with a specific role:
+
+*   **Backend Developer 🧠:** Creates the core application logic, typically generating a `backend.py` file.
 *   **Frontend Developer 🎨:** Creates a simple frontend (e.g., `frontend.py`), *if* the Project Manager determines it's necessary based on the application description.
-*   **Creative Assistant ✨:**  Refines the initial application description, providing more detail and clarity.
+*   **Creative Assistant ✨:** Refines the initial application description, providing more detail and clarity.
 *   **Security Developer 🛡️:** Reviews the generated code for potential vulnerabilities and suggests improvements.
-*   **Project Manager 📝:**  Creates a development plan and consolidates feedback from all the actors.
+*   **Project Manager 📝:** Creates a development plan and consolidates feedback from all the actors.
 
 This collaborative approach helps to produce more complete and well-structured applications.
 
@@ -264,7 +286,7 @@ python create_app_from_scratch.py --app-description "A simple web app to track t
 
 **Required Argument:**
 
-*   `--app-description` (`-d`): 💬 A clear and concise description of the application you want to create.  The more detail you provide, the better the results.
+*   `--app-description` (`-d`): 💬 A clear and concise description of the application you want to create. The more detail you provide, the better the results.
 
 **Common Options:**
 
@@ -272,46 +294,33 @@ python create_app_from_scratch.py --app-description "A simple web app to track t
 *   `--llm-temperature` (`-temp`): 🔥 The temperature for the LLM (default: 0.2).
 *   `--llm-custom-prompt` (`-p`): 📝 Path to a directory containing your custom prompt files for each actor.
 *   `--openai-api-base`: 🌐 Base URL for local LLMs (e.g., `http://localhost:1234/v1` for LM Studio).
-*   `--config`: ⚙️ Path to TOML configuration file.
-*    `--debug`: 🐛 Enable debug logging.
+*    `--config`: Path to TOML configuration file.
+*   `--debug`: 🐛 Enable debug logging.
 
 ### Example Prompts (Creator)
 
-You'll need to create prompt files (e.g., `prompt_backend.txt`, `prompt_frontend.txt`, `prompt_security_review.txt`, etc.) in the custom prompt directory.  These prompts will guide the different LLM actors.  Use placeholders like `{description}` and `{existing_code}` to inject the relevant information.
+You'll need to create prompt files (e.g., `prompt_backend.txt`, `prompt_frontend.txt`, `prompt_security_review.txt`, etc.) in the custom prompt directory. These prompts will guide the different LLM actors. Use placeholders like `{description}` and `{existing_code}` to inject the relevant information.
 
-**Example:**
+### Example (Creator)
 
 ```bash
 python create_app_from_scratch.py -d "A command-line tool to convert Markdown files to HTML, with support for custom templates." --openai-api-base http://localhost:1234/v1 --config config.toml --debug
 ```
 
-The generated application files will be created in a temporary directory.  The script is designed *not* to automatically delete this directory, so you can inspect and modify the generated code.
+The generated application files will be created in a temporary directory. The script is designed *not* to automatically delete this directory, so you can inspect and modify the generated code.
 
-## III.  `scraper.py` and `process.py`: The Finder and Orchestrator 🔍⚙️
-### Overview
-
-`scraper.py` is a script engineered to locate and sift through Python repositories on GitHub based on a set of criteria you define. These criteria can include aspects like the number of lines of code in the files, the ratio of comments to code (an indicator of code quality), and the last update date of the repository.
-
-The `process.py` script acts as a conductor, efficiently running `fabgpt.py` across a multitude of Python repositories. These repositories are typically discovered using `scraper.py`, making the process streamlined and automated.
-
-### Usage (scraper and process)
-
-```bash
-python scraper.py --token YOUR_GITHUB_TOKEN --max-repos 10 --quality-threshold 50 --output output.json
-python process.py --input output.json --token YOUR_GITHUB_TOKEN --config config.toml --branch main --output results.json --fork
-```
 ## Troubleshooting 🐛
 
-*   **API Key Issues:** Ensure your `OPENAI_API_KEY` or `OPENAI_API_BASE` environment variables are set correctly.  You can also provide these values via the `--config` file or the `--openai-api-key` / `--openai-api-base` command-line options.  If you're using a local LLM, set `openai_api_key = "none"` in your `config.toml`.
+*   **API Key Issues:** Ensure your `OPENAI_API_KEY` or `OPENAI_API_BASE` environment variables are set correctly. You can also provide these values via the `--config` file or the `--openai-api-key` / `--openai-api-base` command-line options. If you're using a local LLM, set `openai_api_key = "none"` in your `config.toml`.
 *   **GitHub Token Permissions:** Your GitHub PAT must have the `repo` scope.
 *   **Tool Not Found:** If a static analysis tool is not found, make sure it's installed (`pip install <tool_name>`).
 *   **LLM Errors:** If the LLM consistently fails, consider adjusting the `--llm-temperature` or using a different `--llm-model`.
-*   **Pull Request Creation Failures:** Double-check your token, repository URL, and branch names.  Make sure you have write access to the repository (or use the forking workflow).
+*   **Pull Request Creation Failures:** Double-check your token, repository URL, and branch names. Make sure you have write access to the repository (or use the forking workflow).
 * **Forking error**: Ensure you insert your github username with `--fork-user`
 
 ## Contributing 🤝
 
-Contributions are highly welcome!  Please submit pull requests or open issues to discuss proposed changes or report bugs.
+Contributions are highly welcome! Please submit pull requests or open issues to discuss proposed changes or report bugs.
 
 ## License 📜
 
