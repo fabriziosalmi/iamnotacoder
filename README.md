@@ -1,87 +1,127 @@
-# FabGPT
+# FabGPT: Automated Python Code Improvement Tool
 
-FabGPT is a command-line tool designed to enhance Python code quality in GitHub repositories.  It leverages Large Language Models (LLMs) to analyze, improve, and generate tests for your code. FabGPT automates the process of code review, refactoring, and test generation, making it easier to maintain high-quality code. It can integrate with various static analysis tools, testing frameworks, and provides flexible configuration options, including custom prompts for fine-grained control over LLM behavior.  The tool supports local-only commits or full pull request creation.  It also includes robust error handling, caching, and reporting.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/release/python-370/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-## Index
+FabGPT is a command-line tool designed to automatically improve the quality of Python code within GitHub repositories. It leverages static analysis tools, Large Language Models (LLMs), and automated testing to enhance code style, maintainability, security, and performance.  FabGPT can operate on individual files or process multiple files from a JSON list, making it suitable for both targeted improvements and broader code quality initiatives.  It integrates seamlessly with GitHub, offering both local commit and pull request creation capabilities, and it fully supports forking for a non-destructive workflow.
 
-1.  [Features](#features)
-2.  [Installation](#installation)
-3.  [Configuration](#configuration)
-    *   [TOML Configuration File](#toml-configuration-file)
-    *   [Environment Variables](#environment-variables)
-4.  [Usage](#usage)
-    *  [Command-Line Options](#command-line-options)
-    *   [Examples](#examples)
-5.  [Workflow](#workflow)
-6.  [Custom Prompts](#custom-prompts)
-7.  [Static Analysis Tools](#static-analysis-tools)
-8.  [Test Frameworks](#test-frameworks)
-9.  [Caching](#caching)
-10. [Logging](#logging)
-11. [Error Handling](#error-handling)
-12. [Contributing](#contributing)
-13. [License](#license)
+## Features
 
-## 1. Features <a name="features"></a>
+*   **Automated Code Improvement:**  Uses LLMs to suggest and apply improvements in various categories (style, maintainability, security, performance).  Provides a robust retry mechanism and handles diverse LLM response formats.
+*   **Static Analysis Integration:** Integrates with popular static analysis tools:
+    *   [Black](https://github.com/psf/black) (code formatting)
+    *   [isort](https://pycqa.github.io/isort/) (import sorting)
+    *   [Pylint](https://www.pylint.org/) (code analysis)
+    *   [Flake8](https://flake8.pycqa.org/en/latest/) (style guide enforcement)
+    *   [Mypy](http://mypy-lang.org/) (static typing)
+    *   Tool selection and exclusion are configurable.
+*   **Automated Test Generation:**  Can generate unit tests using an LLM, helping to improve code coverage.  Includes a syntax error correction loop for generated tests.
+*   **Test Execution and Coverage Reporting:**  Runs tests using `pytest` and reports code coverage. Configurable minimum coverage thresholds and actions (fail/warn) for insufficient coverage.
+*   **GitHub Integration:**
+    *   Clones repositories (shallow clone for efficiency).
+    *   Creates new branches for improvements.
+    *   Creates commits with detailed, customizable messages.
+    *   Creates pull requests directly on GitHub.
+    *   **Forking Support:** Automatically forks the target repository, allowing for a safe, non-destructive workflow.  Changes are pushed to the fork, and pull requests are created from the fork to the original repository.
+*   **Configuration:**
+    *   Supports configuration via TOML files.
+    *   Command-line options override configuration file settings.
+*   **Caching:** Caches static analysis results to improve performance on subsequent runs.
+*   **Dry Run Mode:**  Performs all analysis and improvement steps but doesn't commit, push, or create pull requests.
+*   **Local Commit Mode:**  Makes changes and commits locally, but does not create a pull request.
+*   **Customizable Prompts:** Allows users to provide custom prompt templates for the LLM, enabling fine-grained control over the improvement process.  Prompts are separated by category (style, maintenance, etc.).
+*   **Detailed Reporting:** Generates a comprehensive text report summarizing changes, static analysis results, test results, and LLM improvements.  Also generates a JSON log file for tracking.
+*   **Robust Error Handling:** Includes extensive error handling, retries for LLM calls and Git operations, and informative error messages.
+*   **Progress Indicators:** Uses `rich` library for visually appealing progress bars and console output.
+*   **Fast Mode:** Option to reduce delays for faster execution (useful for quick checks).
+*   **Support for Local LLMs:** Can be configured to use local LLMs via the OpenAI API (e.g., with LM Studio).
+*   **Line Length Control:**  Enforces a configurable maximum line length, defaulting to the PEP 8 standard of 79 characters.
+* **Output File Options:** Allows user to save the modified file to another path respect the original.
+* **Output Info File:** Create a complete report in txt format.
 
-*   **Code Improvement:** Uses LLMs to suggest and apply improvements to Python code based on specified categories (style, maintenance, security, performance).
-*   **Static Analysis Integration:** Integrates with popular static analysis tools like `pylint`, `flake8`, `black`, `isort`, and `mypy`.
-*   **Test Generation:** Automatically generates unit tests for improved code using a specified testing framework (currently supports `pytest`).
-*   **Dynamic Analysis:**  Runs generated tests and checks code coverage.
-*   **Configurable:**  Supports configuration via TOML files, command-line options, and environment variables.
-*   **Custom Prompts:** Allows custom prompts to guide the LLM's behavior for different improvement categories and test generation.
-*   **Caching:** Caches static analysis results to speed up subsequent runs.
-*   **Pull Request Creation:**  Automatically creates a pull request on GitHub with the improvements.
-*   **Local Commits:**  Option to only commit changes locally without creating a pull request.
-*   **Backup and Restore:** Creates backups before making changes and restores them if errors occur.
-*   **Reporting:** Generates a detailed report of the changes, analysis results, and test results.
-*   **Error Handling:** Robustly handles errors during command execution, LLM interaction, and Git operations.
-* **OpenAI and Local LLM Support**: Use OpenAI's API or local LLM backends (like LM Studio)
+## Installation
 
-## 2. Installation <a name="installation"></a>
+1.  **Clone the FabGPT repository:**
 
-FabGPT requires Python 3.12.8 or later.
+    ```bash
+    git clone https://github.com/your-username/FabGPT.git  # Replace with your repository URL
+    cd FabGPT
+    ```
+
+2.  **Install dependencies:**
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+    
+    *requirements.txt* should contain at least:
+    ```
+    click
+    openai
+    toml
+    GitPython
+    rich
+    PyGithub
+    requests
+    ```
+
+    You'll also need to install the static analysis tools you intend to use.  For example:
+
+    ```bash
+    pip install black isort pylint flake8 mypy pytest pytest-cov
+    ```
+
+## Usage
+
+### Basic Command Structure
 
 ```bash
-pip install FabGPT
-```
-or
-```bash
-git clone https://github.com/efraimgentil/FabGPT
-cd FabGPT
-pip install -r requirements.txt
-```
-This will install the required dependencies, including:
-
-*   `gitpython`: For Git operations.
-*   `toml`: For TOML configuration parsing.
-*   `click`: For command-line interface creation.
-*   `openai`: For interacting with the OpenAI API.
-*   `rich`: For enhanced console output.
-*   `PyGithub`: To interact with Github API.
-* `difflib`:  For calculating differences between code versions.
-*  `pytest`: (Optional, but recommended) for running tests.
-*  Static analysis tools (Optional, but recommended): `black`, `isort`, `pylint`, `flake8`, `mypy`.
-
-You should install any of the optional, recommended tools you plan to use.  For example:
-
-```bash
-pip install black isort pylint flake8 mypy pytest
+python fabgpt.py --repo <repository_url> --files <file_paths> --branch <target_branch> --token <github_token> [options]
 ```
 
-## 3. Configuration <a name="configuration"></a>
+### Required Arguments
 
-FabGPT can be configured using a combination of a TOML configuration file, environment variables, and command-line options. Command-line options take precedence over environment variables, which in turn take precedence over the TOML file.
+*   `--repo` (`-r`):  The URL of the GitHub repository (e.g., `https://github.com/user/repo`).
+*   `--files` (`-f`): Comma-separated relative paths to the Python files to be improved (e.g., `src/module1.py,src/module2.py`).
+*   `--branch` (`-b`): The target branch in the repository (e.g., `main`, `develop`).
+*   `--token` (`-t`): Your GitHub Personal Access Token (PAT) with appropriate permissions (repo scope is generally required).
 
-### 3.A. TOML Configuration File <a name="toml-configuration-file"></a>
+### Common Options
 
-Create a `config.toml` file in the project directory or specify its path using the `--config` option.
+*   `--config` (`-c`): Path to a TOML configuration file. Command-line options override config file settings.
+*   `--tools` (`-T`):  Comma-separated list of static analysis tools to use (default: `black,isort,pylint,flake8,mypy`).
+*   `--exclude-tools` (`-e`): Comma-separated list of tools to exclude.
+*   `--llm-model` (`-m`):  The LLM model to use (default: `qwen2.5-coder-14b-instruct-mlx`).  This can be an OpenAI model name or a model name compatible with your local LLM setup.
+*   `--llm-temperature` (`-temp`):  The temperature for the LLM (default: 0.2).
+*   `--llm-optimization-level` (`-l`): Optimization level for the LLM (default: `balanced`).
+*   `--llm-custom-prompt` (`-p`): Path to a directory containing custom prompt files (default: `.`).
+*   `--test-framework` (`-F`):  The test framework to use (default: `pytest`).  Currently, only `pytest` is supported.
+*   `--min-coverage` (`-c`):  Minimum code coverage threshold (as a percentage).
+*   `--coverage-fail-action` : Action to take if coverage is below the threshold (default: `fail`). Choices: `fail`, `warn`.
+*   `--no-dynamic-analysis`: Disable dynamic analysis (testing).
+*   `--cache-dir`: Directory to store cached analysis results.
+*   `--debug`: Enable debug logging.
+*   `--dry-run`: Perform a dry run without making any actual changes.
+*   `--local-commit`: Only commit changes locally, don't create a pull request.
+*   `--fast`: Enable fast mode (reduces delays).
+*   `--openai-api-base`:  Base URL for the OpenAI API (for local LLMs, e.g., `http://localhost:1234/v1`).
+*   `--no-output`: Disable all console output.
+*   `--categories` (`-C`): Comma-separated list of improvement categories (default: `style,maintenance,security,performance`).
+*   `--force-push`: Force push the branch if it already exists.
+*   `--output-file` (`-o`):  Path to save the modified file. Defaults to overwriting the original.
+*   `--output-info`: Path to save the TEXT report (default: `report.txt`).
+*   `--line-length`: Maximum line length for code formatting (default: 79).
+* `--fork-repo`: Automatically fork the repository.
+* `--fork-user`: Your GitHub username (if different from what can be inferred from the token).
 
-Example `config.toml`:
+### Configuration File (config.toml)
+
+The `config.toml` file allows you to set default values for most options.  Example:
 
 ```toml
-openai_api_key = "none"  # Or your OpenAI API Key
-openai_api_base = "http://localhost:1234/v1"  # For LM Studio, or similar
+openai_api_key = "none"  # Or your OpenAI API key, or use an environment variable
+openai_api_base = "http://localhost:1234/v1"  # For LM Studio, if applicable
 llm_model = "qwen2.5-coder-14b-instruct-mlx"
 llm_temperature = 0.2
 llm_optimization_level = "balanced"
@@ -92,231 +132,118 @@ min_coverage = 80
 coverage_fail_action = "warn"
 ```
 
-*   `openai_api_key`: Your OpenAI API key.  Set to `"none"` if using a local LLM server.
-*   `openai_api_base`: The base URL for the OpenAI API.  Use this for local LLM servers (e.g., LM Studio).
-*   `llm_model`:  The LLM model to use.
-*   `llm_temperature`:  The temperature for the LLM (controls randomness).
-*   `llm_optimization_level`:  The optimization level for LLM improvements (`balanced`, etc.).  This setting is passed to your custom prompts.
-*   `tools`:  A comma-separated list of static analysis tools to use.
-*   `exclude_tools`: A comma-separated list of tools to exclude.
-*   `test_framework`:  The testing framework to use (`pytest`).
-*   `min_coverage`:  The minimum code coverage percentage required.
-*   `coverage_fail_action`:  Action to take if coverage is below the minimum (`fail` or `warn`).
+### Custom Prompts
 
-### 3.B. Environment Variables <a name="environment-variables"></a>
+Create a directory (default: `.`) and place text files named `prompt_<category>.txt` within it.  For example:
 
-You can also set configuration options using environment variables.
+*   `prompt_style.txt`:  Contains the prompt for style improvements.
+*   `prompt_maintenance.txt`: Contains the prompt for maintainability improvements.
+*   `prompt_security.txt`:  Contains the prompt for security improvements.
+*   `prompt_performance.txt`: Contains the prompt for performance improvements.
+* `prompt_tests.txt`: Contains the prompt for tests generation.
 
-*   `OPENAI_API_KEY`: Your OpenAI API key.
-*   `OPENAI_API_BASE`:  The base URL for the OpenAI API (e.g., for LM Studio).
+Within the prompt files, use `{code}` as a placeholder for the code to be improved and `{file_base_name}` for the file base name.
 
-## 4. Usage <a name="usage"></a>
-
-### 4.A. Command-Line Options <a name="command-line-options"></a>
+Example `prompt_style.txt`:
 
 ```
-Usage: fabgpt.py [OPTIONS]
+You are a coding assistant tasked with improving the style of the following Python code.
+Focus on PEP 8 compliance, readability, and clarity.  Return only the improved code,
+without any introductory or concluding text. Do not include markdown code fences.
 
-  Improves a Python file in a GitHub repository, generates tests, and creates a
-  Pull Request.
+{code}
+```
+Example 'prompt_tests.txt'
+```
+You are a coding assistant tasked with writing test for the following Python code.
+Focus on  readability, and clarity.  Return only the test code,
+without any introductory or concluding text.  Do not include markdown code fences.
+Write test for {file_base_name}.py file:
 
-Options:
-  -r, --repo TEXT                 GitHub repository URL.  [required]
-  -f, --files TEXT                Comma-separated relative paths to files to
-                                  improve.  [required]
-  -b, --branch TEXT               Target branch name.  [required]
-  -t, --token TEXT                GitHub Personal Access Token (PAT).
-                                  [required]
-  -T, --tools TEXT                Static analysis tools (comma-separated).
-  -e, --exclude-tools TEXT        Tools to exclude (comma-separated).
-  -m, --llm-model TEXT            LLM model to use.
-  -temp, --llm-temperature FLOAT  Temperature for the LLM.
-  -l, --llm-optimization-level TEXT
-                                  LLM optimization level.
-  -p, --llm-custom-prompt TEXT    Path to a custom prompt directory.
-  -F, --test-framework TEXT       Test framework.
-  -c, --min-coverage FLOAT        Minimum code coverage threshold.
-  --coverage-fail-action [fail|warn]
-                                  Action on insufficient coverage.
-  -cm, --commit-message TEXT      Custom commit message.
-  --no-dynamic-analysis           Disable dynamic analysis (testing).
-  --cache-dir TEXT                Directory for caching.
-  --debug                         Enable debug logging.
-  --dry-run                       Run without making changes.
-  --local-commit                  Only commit locally, don't create a Pull
-                                  Request.
-  --fast                          Enable fast mode by reducing delays.
-  --openai-api-base TEXT          Base URL for OpenAI API (for LMStudio, e.g.,
-                                  http://localhost:1234/v1).
-  --config PATH                   Configuration file.
-  --no-output                     Disable console output.
-  -C, --categories TEXT           Comma-separated list of improvement
-                                  categories.  Defaults to
-                                  'style,maintenance,security,performance'.
-  --force-push                    Force push the branch if it already exists.
-  -o, --output-file TEXT          Path to save the modified file. Defaults to
-                                  overwriting the original.
-  --output-info TEXT               Path to save the TEXT report. Defaults to
-                                  report.txt
-  --line-length INTEGER           Maximum line length for code formatting.
-  --help                          Show this message and exit.
-
+{code}
 ```
 
-### 4.B. Examples <a name="examples"></a>
+### Examples
 
-1.  **Basic usage with default settings:**
-
-    ```bash
-    fabgpt -r https://github.com/your-username/your-repo -f your_file.py -b main -t your_github_token
-    ```
-
-2.  **Using a configuration file:**
+1.  **Basic usage with a configuration file:**
 
     ```bash
-    fabgpt -r https://github.com/your-username/your-repo -f your_file.py -b main -t your_github_token --config config.toml
+    python fabgpt.py --repo https://github.com/user/repo --files src/my_module.py --branch main --token YOUR_GITHUB_TOKEN --config config.toml
     ```
 
-3.  **Specifying static analysis tools and a custom prompt directory:**
+2.  **Dry run with debug logging:**
 
     ```bash
-    fabgpt -r https://github.com/your-username/your-repo -f your_file.py -b main -t your_github_token -T "black,isort,pylint" -p /path/to/your/prompts
+    python fabgpt.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN --debug --dry-run
     ```
 
-4.  **Running in dry-run mode:**
+3.  **Using a local LLM with LM Studio:**
 
     ```bash
-    fabgpt -r https://github.com/your-username/your-repo -f your_file.py -b main -t your_github_token --dry-run
+    python fabgpt.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN --openai-api-base http://localhost:1234/v1 --llm-model qwen2.5-coder-14b-instruct-mlx
     ```
+    (and set `openai_api_key = "none"` in `config.toml`)
 
-5. **Using local commit only:**
-    ```bash
-    fabgpt -r https://github.com/your-username/your-repo -f your_file.py -b main -t your_github_token --local-commit
-    ```
-6.  **Using a local LLM server (e.g., LM Studio):**
+4.  **Using forking, and automatically generating tests:**
 
     ```bash
-    fabgpt -r https://github.com/your-username/your-repo -f your_file.py -b main -t your_github_token --openai-api-base http://localhost:1234/v1
+    python fabgpt.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN --fork-repo --fork-user yourusername
     ```
+5. **Save the modified file to another path:**
 
-    Make sure the `config.toml` also sets `openai_api_key = "none"`.
-7. **Improve multiple files**
-   ```bash
-    fabgpt -r https://github.com/your-username/your-repo -f file1.py,file2.py,utils/helper.py -b main -t your_github_token
-   ```
-8. **Specifying Improvement Categories**
     ```bash
-   fabgpt -r https://github.com/your-username/your-repo -f your_file.py -b main -t your_github_token -C "style,performance"
+    python fabgpt.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN --fork-repo --fork-user yourusername --output-file improved_module.py
     ```
+6.  **Running on Multiple Files and exclude mypy tool:**
 
-## 5. Workflow <a name="workflow"></a>
-
-1.  **Clone Repository:** Clones the specified GitHub repository (shallow clone) to a temporary directory.
-2.  **Checkout Branch:** Checks out the specified target branch.  Fetches if necessary.
-3.  **Create Branch:** Creates a new, uniquely-named branch for the improvements.
-4.  **Analyze Project (Optional):** Runs specified static analysis tools on the file.  Results are cached if a cache directory is provided.
-5.  **Improve File:**  Reads the file content, then iterates through the specified improvement categories:
-    *   Loads the appropriate custom prompt for the category (if available).
-    *   Sends the code and prompt to the LLM.
-    *   Cleans the LLM response to extract the improved code.
-    *   Checks the improved code for syntax errors.
-    *   Retries LLM calls and syntax fixes up to a maximum number of attempts.
-    *  Formats code with `black` and `isort` before sending to the LLM.
-6.  **Generate Tests (Optional):**  Sends the (potentially improved) code to the LLM to generate tests.
-    *   Uses a custom prompt for test generation (if available).
-    *   Checks generated tests for syntax errors.
-    *   Retries LLM calls and syntax fixes.
-    *  Writes tests to a `tests/` directory.
-7.  **Run Tests (Optional):** Runs the generated tests (currently only `pytest` is supported).
-    *   Checks code coverage if `--min-coverage` is specified.
-    *  Handles test failures and coverage failures based on `--coverage-fail-action`.
-8.  **Create Commit:** Creates a Git commit with the changes (improved code and generated tests).  A custom commit message can be provided.
-9.  **Create Pull Request (Optional):**  Pushes the new branch to GitHub and creates a pull request. The PR title and body describe the changes made.
-10. **Create Info File:** Generates a `report.txt` (or custom-named) file with details of the changes, analysis results, and test results.
-11. **Cleanup:**  Deletes the temporary directory (unless `--debug` is enabled).
-
-## 6. Custom Prompts <a name="custom-prompts"></a>
-
-Custom prompts allow fine-grained control over the LLM's behavior.  You can provide a directory containing prompt files using the `--llm-custom-prompt` option.
-
-*   **Improvement Prompts:**  Create text files named `prompt_{category}.txt` (e.g., `prompt_style.txt`, `prompt_maintenance.txt`) in the custom prompt directory.  These prompts should instruct the LLM on how to improve the code for that specific category.
-
-    The prompt template should contain a placeholder `{code}` which will be replaced with the current code.  You can also use the `--llm-optimization-level` option to pass a hint to the prompt.  This value is available in the prompt, but you must include it in the prompt text itself.
-
-    Example `prompt_style.txt`:
-
-    ```text
-    You are a coding assistant tasked with improving the style of Python code.  
-    Refactor the following code to improve its style, following PEP 8 guidelines.
-    Optimization level: {llm_optimization_level}
-    
-    Maintain a maximum line length of 79 characters.
-
-    {code}
-
-    Return only the improved code, without any introductory or concluding text.
-    Do not include markdown code fences.
+    ```bash
+    python fabgpt.py --repo https://github.com/user/repo --files "src/module1.py,src/module2.py,tests/test_module1.py" --branch development --token YOUR_GITHUB_TOKEN --exclude-tools mypy --fork-repo
     ```
+7.  **Using scraper.py and process.py to run FabGPT on multiple Repositories**
+  * **Run the Scraper:**
+   First, use `scraper.py` to find repositories and files that meet your criteria. This will output a JSON file containing a list of repositories and files.
 
-*   **Test Generation Prompt:** Create a text file named `prompt_tests.txt` in the custom prompt directory. This prompt should instruct the LLM how to generate tests.
-
-    The prompt template should include `{code}` (replaced with the file's code) and `{file_base_name}` (replaced with the file's base name without extension).
-
-    Example `prompt_tests.txt`:
-
-    ```text
-    You are a coding assistant tasked with generating unit tests for Python code.
-
-    Write unit tests for the following code using pytest.  
-    The file name is {file_base_name}.py.
-    Maintain a maximum line length of 79 characters.
-
-    {code}
-
-    Return only the test code, without any introductory or concluding text.
-    Do not include markdown code fences.
+    ```bash
+    python scraper.py --token YOUR_GITHUB_TOKEN --max-repos 10 --quality-threshold 50 --output output.json
     ```
+    This command searches for up to 10 repositories, includes Python files with a "quality score" (lines of code in this example) of 50 or less, and saves the results to `output.json`.
 
-## 7. Static Analysis Tools <a name="static-analysis-tools"></a>
+   * **Process the Results with process.py:**
+  Next, use `process.py` to run `fabgpt.py` on the repositories and files listed in the JSON file created by the scraper.
+    ```bash
+    python process.py --input output.json --token YOUR_GITHUB_TOKEN --config config.toml --branch main --output results.json --fork
+    ```
+    This command reads the `output.json` file, uses your GitHub token, applies the settings from `config.toml`, targets the `main` branch, saves the processing results to `results.json`, and forks each repository before making changes.
 
-FabGPT supports the following static analysis tools:
+## Workflow
 
-*   `pylint`
-*   `flake8`
-*   `black`
-*   `isort`
-*   `mypy`
+1.  **Cloning:** The repository is cloned (shallow clone) to a temporary directory.
+2.  **Branching:**  A new branch is created with a unique, descriptive name based on the file name, purpose, timestamp, and a UUID.  The target branch is checked out first, and then the new branch is created from it.
+3.  **Static Analysis:** The selected static analysis tools are run, and the results are cached (if `--cache-dir` is specified).
+4.  **Test Generation:** If enabled (`--no-dynamic-analysis` is *not* set), tests are generated using the LLM.  Any syntax errors in the generated tests are automatically corrected (with retries).
+5.  **Test Execution:**  Tests are run (if generated and the test framework is available).  Code coverage is checked if `--min-coverage` is specified.
+6.  **LLM Improvement:** The LLM is used to improve the code based on the specified categories and custom prompts.  The code is formatted with Black and isort *before* being sent to the LLM.  Retries are performed if the LLM fails or returns invalid code.
+7. **Check for Changes:** Before creating any commit, the script verify if there are effective changes. If no changes, skip the commit.
+8.  **Commit:**  Changes (including generated tests) are committed to the new branch.  The commit message is automatically generated and includes details about the improvements made.
+9.  **Push:** The new branch is pushed to the remote repository (your fork if `--fork-repo` is used).
+10. **Pull Request:**  A pull request is created on GitHub (from your fork to the original repository if forking is enabled). The PR title and body summarize the changes.
+11. **Reporting:** A text report (`report.txt` or as specified by `--output-info`) is generated with a summary of the changes. A JSON log file is also created in the `logs` directory.
+12. **Cleanup:** The temporary directory is removed (unless `--debug` is enabled).
 
-The `--tools` option specifies which tools to use. The `--exclude-tools` option specifies which tools *not* to use.  The tool must be installed in your environment for FabGPT to use it.
+## Troubleshooting
 
-## 8. Test Frameworks <a name="test-frameworks"></a>
+*   **OpenAI API Key Issues:** Ensure your `OPENAI_API_KEY` environment variable is set correctly, or provide the key via `--openai-api-key` or the `config.toml` file.  If using a local LLM, set `openai_api_key = "none"` in `config.toml` and provide the `--openai-api-base` URL.
+*   **GitHub Token Permissions:** Make sure your GitHub PAT has the necessary permissions (usually `repo` scope).
+*   **Tool Not Found:**  If a static analysis tool is not found, it will be skipped.  Make sure all required tools are installed.
+*   **Test Failures:**  If tests fail, review the test output and the generated tests.  You may need to manually adjust the tests.
+*   **LLM Errors:**  If the LLM consistently fails, try adjusting the `--llm-temperature` or using a different `--llm-model`.
+*   **Pull Request Creation Failures:** Double-check your token, repository URL, and branch names.  Ensure you have write access to the repository (or use the forking workflow).
+* **Forking error**: Ensure you insert your github username with `--fork-user`
 
-Currently, only `pytest` is supported as a test framework.
+## Contributing
 
-## 9. Caching <a name="caching"></a>
+Contributions are welcome! Please submit pull requests or open issues to discuss proposed changes.
 
-Static analysis results are cached to improve performance.  Use the `--cache-dir` option to specify a directory for storing the cache files.  The cache key is based on the file path, the selected tools, excluded tools, and the configured line length. If the cache directory is not specified, caching is disabled.
-
-## 10. Logging <a name="logging"></a>
-
-FabGPT uses the `rich` library for enhanced console logging.  The `--debug` option enables more verbose logging.  Log messages indicate progress, errors, and warnings.  A JSON log file is also created in a `logs/` directory within the FabGPT directory, containing detailed information about each run.
-
-## 11. Error Handling <a name="error-handling"></a>
-
-FabGPT handles various errors gracefully:
-
-*   **Command Execution Errors:** Errors from running shell commands (e.g., static analysis tools) are caught and reported.
-*   **LLM Errors:**  Errors from the LLM (including timeouts) are caught, and the operation is retried up to `MAX_LLM_RETRIES` times.
-*   **Syntax Errors:**  Syntax errors in the LLM-generated code are caught, and the LLM is prompted to fix them (up to `MAX_SYNTAX_RETRIES` times).
-*   **Git Errors:** Errors during Git operations (cloning, branching, committing, pushing) are caught and reported.
-*   **File I/O Errors:** Errors reading or writing files are caught and handled.
-
-If errors occur during file modification, the code is restored from a backup.
-
-## 12. Contributing <a name="contributing"></a>
-
-Contributions are welcome! Please submit issues or pull requests on the [GitHub repository](https://github.com/efraimgentil/FabGPT).
-
-## 13. License <a name="license"></a>
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
