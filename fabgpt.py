@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.progress import Progress
 from rich.table import Table
 import json
-from github import Github
+from github import GitHub
 import hashlib
 import time
 import ast
@@ -22,7 +22,7 @@ import uuid
 console = Console()
 
 # Constants
-DEFAULT_LLM_MODEL = "qwen2.5-coder-7b-instruct"
+DEFAULT_LLM_MODEL = "qwen2.5-coder-7b-instruct"  # Or any other default
 DEFAULT_LLM_TEMPERATURE = 0.2
 MAX_SYNTAX_RETRIES = 5
 MAX_LLM_RETRIES = 3
@@ -30,7 +30,7 @@ OPENAI_TIMEOUT = 120.0
 MAX_PUSH_RETRIES = 3  # Maximum number of times to retry pushing
 
 def run_command(command: List[str], cwd: str = None) -> Tuple[str, str, int]:
-    # (No changes)
+    """Executes a shell command."""
     try:
         start_time = time.time()
         result = subprocess.run(
@@ -49,7 +49,7 @@ def run_command(command: List[str], cwd: str = None) -> Tuple[str, str, int]:
         return "", str(e), 1
 
 def load_config(config_file: str) -> dict:
-    # (No changes)
+    """Loads configuration from a TOML file."""
     try:
         with open(config_file, "r") as f:
             return toml.load(f)
@@ -58,7 +58,7 @@ def load_config(config_file: str) -> dict:
         exit(1)
 
 def create_backup(file_path: str) -> str:
-    # (No changes)
+    """Creates a backup of a file."""
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = f"{file_path}.bak.{timestamp}"
     try:
@@ -70,7 +70,7 @@ def create_backup(file_path: str) -> str:
         return None
 
 def restore_backup(file_path: str, backup_path: str) -> None:
-    # (No changes)
+    """Restores a file from a backup."""
     try:
         shutil.copy2(backup_path, file_path)
         console.print(f"[green]File restored from:[/green] {backup_path}")
@@ -78,7 +78,7 @@ def restore_backup(file_path: str, backup_path: str) -> None:
         console.print(f"[red]Error restoring backup:[/red] {e}")
 
 def get_inputs(ctx: click.Context, param: click.Parameter, value: Any) -> dict:
-    # (No changes)
+    """Gets input values from config file and command line."""
     config = {}
     if ctx.default_map:
         config.update(ctx.default_map)
@@ -91,7 +91,7 @@ def get_inputs(ctx: click.Context, param: click.Parameter, value: Any) -> dict:
     return config
 
 def clone_repository(repo_url: str, token: str) -> Tuple[git.Repo, str]:
-    # (No changes)
+    """Clones a repository."""
     temp_dir = tempfile.mkdtemp()
     auth_repo_url = repo_url.replace("https://", f"https://{token}@")
     try:
@@ -106,7 +106,7 @@ def clone_repository(repo_url: str, token: str) -> Tuple[git.Repo, str]:
         exit(1)
 
 def checkout_branch(repo: git.Repo, branch_name: str) -> None:
-    # (No changes)
+    """Checks out a branch."""
     try:
         console.print(f"[blue]Checking out branch: {branch_name}[/blue]")
         start_time = time.time()
@@ -128,7 +128,7 @@ def checkout_branch(repo: git.Repo, branch_name: str) -> None:
 
 
 def create_branch(repo: git.Repo, file_name: str, file_purpose: str = "") -> str:
-    # (No changes)
+    """Creates a new branch."""
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     sanitized_file_name = "".join(c if c.isalnum() else "_" for c in file_name)
     unique_id = uuid.uuid4().hex
@@ -145,7 +145,7 @@ def create_branch(repo: git.Repo, file_name: str, file_purpose: str = "") -> str
         exit(1)
 
 def get_file_purpose(file_path: str) -> str:
-    # (No changes)
+    """Extracts the purpose of a file (function/class name)."""
     try:
         with open(file_path, "r") as f:
             first_line = f.readline()
@@ -159,7 +159,7 @@ def get_file_purpose(file_path: str) -> str:
         return ""
 
 def analyze_project(repo_path: str, file_path: str, tools: List[str], exclude_tools: List[str], cache_dir: str = None, debug: bool = False) -> Dict[str, Dict[str, Any]]:
- # (No changes)
+    """Runs static analysis tools on a project."""
     cache_key_data = f"{file_path}-{','.join(sorted(tools))}-{','.join(sorted(exclude_tools))}".encode('utf-8')
     cache_key = hashlib.sha256(cache_key_data).hexdigest()
     cache_file = os.path.join(cache_dir, f"{cache_key}.json") if cache_dir else None
@@ -228,7 +228,7 @@ def analyze_project(repo_path: str, file_path: str, tools: List[str], exclude_to
     return results
 
 def clean_llm_response(response_text: str) -> str:
-    # (No changes)
+    """Cleans the LLM response to extract code."""
     code_blocks = re.findall(r"```(?:python)?\n(.*?)\n```", response_text, re.DOTALL)
     if code_blocks:
         return code_blocks[-1].strip()
@@ -248,7 +248,7 @@ def clean_llm_response(response_text: str) -> str:
     return "\n".join(cleaned_lines).strip()
 
 def improve_file(file_path: str, client: OpenAI, llm_model: str, llm_temperature: float, categories: List[str], custom_prompt_dir: str, analysis_results: Dict[str, Dict[str, Any]], debug: bool = False) -> Tuple[str, bool]:
-   # (No changes)
+    """Improves the file using LLM."""
     backup_path = create_backup(file_path)
     if not backup_path:
         console.print("[red]Failed to create backup. Aborting.[/red]")
@@ -398,7 +398,7 @@ def improve_file(file_path: str, client: OpenAI, llm_model: str, llm_temperature
     return improved_code, total_success
 
 def fix_tests(generated_tests: str, file_base_name: str) -> Tuple[str, bool]:
-    # (No changes)
+    """Fixes syntax errors in generated tests."""
     try:
         ast.parse(generated_tests)
         return generated_tests, False
@@ -421,7 +421,7 @@ def fix_tests(generated_tests: str, file_base_name: str) -> Tuple[str, bool]:
         return error_message_with_line, True
 
 def generate_tests(file_path: str, client: OpenAI, llm_model: str, llm_temperature: float, test_framework: str, custom_prompt_dir: str, debug: bool = False) -> str:
-    # (No changes)
+    """Generates tests using LLM."""
     with open(file_path, "r") as f:
         code = f.read()
 
@@ -525,7 +525,7 @@ def generate_tests(file_path: str, client: OpenAI, llm_model: str, llm_temperatu
         return ""
 
 def run_tests(repo_path: str, original_file_path: str, test_framework: str, min_coverage: float, coverage_fail_action: str, debug: bool = False) -> Dict[str, Any]:
-    """Runs tests (no changes)."""
+    """Runs tests and checks coverage."""
     test_results = {}
     tests_dir = os.path.join(repo_path, "tests")
 
@@ -564,7 +564,7 @@ def run_tests(repo_path: str, original_file_path: str, test_framework: str, min_
     else:
         console.print(f"[yellow]Unsupported test framework: {test_framework}[/yellow]")
         return {"output": "", "errors": f"Unsupported framework: {test_framework}", "returncode": 1}
-    
+
 def create_info_file(file_path: str, analysis_results: Dict, test_results: Dict, llm_success: bool, categories: List[str], optimization_level: str, output_info: str, min_coverage: float = None) -> None:
     """Generates and saves an info file (plain text) of the changes."""
 
@@ -626,7 +626,7 @@ def create_info_file(file_path: str, analysis_results: Dict, test_results: Dict,
 
 
 def create_commit(repo: git.Repo, file_path: str, commit_message: str, test_results: Dict[str, Any] = None) -> None:
-    """Creates a commit (no changes here).."""
+    """Creates a commit."""
     try:
         console.print("[blue]Creating commit...[/blue]")
         repo.git.add(file_path)
@@ -640,7 +640,7 @@ def create_commit(repo: git.Repo, file_path: str, commit_message: str, test_resu
         console.print(f"[red]Error creating commit:[/red] {e}")
         exit(1)
 
-def create_pull_request(repo_url: str, token: str, base_branch: str, head_branch: str, commit_message: str, analysis_results: Dict[str, Dict[str, Any]], test_results: Dict[str, Any], file_path: str, optimization_level: str, test_framework: str, min_coverage: float, coverage_fail_action:str, repo_path: str, debug: bool = False) -> None:
+def create_pull_request(repo_url: str, token: str, base_branch: str, head_branch: str, commit_message: str, analysis_results: Dict[str, Dict[str, Any]], test_results: Dict[str, Any], file_path: str, optimization_level: str, test_framework: str, min_coverage: float, coverage_fail_action:str, repo_path: str, categories: List[str], debug: bool = False) -> None:
     """Creates a Pull Request on GitHub."""
     try:
         console.print(f"[blue]Creating Pull Request...[/blue]")
@@ -656,6 +656,7 @@ def create_pull_request(repo_url: str, token: str, base_branch: str, head_branch
         namespaced_head = f"{username}:{head_branch}"
 
         body = f"## Pull Request: Improvements to {os.path.basename(file_path)}\n\n"
+        body += f"**Categories Improved:** {', '.join(categories)}\n\n"  # Add categories
         body += "Changes made:\n\n"
         body += "* Code formatting with Black and isort (if installed).\n"
         body += f"* Improvements suggested by LLM (level: {optimization_level}).\n"
@@ -714,65 +715,6 @@ def create_pull_request(repo_url: str, token: str, base_branch: str, head_branch
         console.print(f"[red]Error creating Pull Request:[/red] {e}")
         exit(1)
 
-def create_info_file(file_path: str, analysis_results: Dict, test_results: Dict, llm_success: bool, categories: List[str], optimization_level:str, output_info: str, min_coverage: float = None) -> None:
-    """Generates and saves a TEXT report of the changes."""
-
-    with open(output_info, "w", encoding="utf-8") as f:
-        f.write(f"FabGPT Improvement Report for: {file_path}\n")
-        f.write(f"Timestamp: {datetime.datetime.now().isoformat()}\n\n")
-        f.write(f"LLM Improvement Success: {llm_success}\n")
-        f.write(f"LLM Optimization Level: {optimization_level}\n")
-        f.write(f"Categories Attempted: {', '.join(categories)}\n\n")
-
-        f.write("Changes Made:\n")
-        changes_made = []
-        if shutil.which("black"):
-            changes_made.append("Formatted with Black")
-        if shutil.which("isort"):
-            changes_made.append("Formatted with isort")
-        if llm_success:
-            changes_made.append(f"Applied LLM improvements ({optimization_level})")
-        if test_results:  #check if tests_result exist
-            changes_made.append("Generated/updated tests")
-        if changes_made:
-            for change in changes_made:
-                f.write(f"* {change}\n")
-        else:
-             f.write("No changes made\n")
-
-
-        f.write("\nStatic Analysis Results:\n")
-        if analysis_results:
-            for tool, result in analysis_results.items():
-                if 'returncode' in result:
-                    outcome = "OK" if result['returncode'] == 0 else f"Errors/Warnings ({len(result.get('output', '').splitlines())})"
-                    f.write(f"* {tool}: {outcome}\n")
-                    if result['errors']:
-                        f.write(f"  Errors/Warnings:\n{result['errors']}\n")
-                else:
-                    f.write(f"* {tool}: Skipped (tool not found)\n")
-
-        else:
-            f.write("  No static analysis performed.\n")
-
-        f.write("\nTest Results:\n")
-        if test_results:
-            test_outcome = "Passed" if test_results['returncode'] == 0 else "Failed"
-            f.write(f"  Tests: {test_outcome}\n")
-            if "TOTAL" in test_results.get('output', ''):
-                for line in test_results.get('output').splitlines():
-                    if line.lstrip().startswith("TOTAL"):
-                        try:
-                            coverage_percentage = float(line.split()[-1].rstrip("%"))
-                            f.write(f"  Code Coverage: {coverage_percentage:.2f}%\n")
-                            if coverage_percentage < min_coverage:
-                                f.write(f"  WARNING: Coverage is below the minimum threshold!\n")
-                        except (ValueError, IndexError):
-                            pass
-            if test_results['returncode'] != 0:
-                f.write(f"  WARNING: Some tests failed!\n  Output:\n{test_results.get('output', '')}\n")
-        else:
-            f.write("  No tests performed.\n")
 
 @click.command()
 @click.option("--repo", "-r", required=True, help="GitHub repository URL.")
@@ -803,6 +745,7 @@ def create_info_file(file_path: str, analysis_results: Dict, test_results: Dict,
 @click.option("--output-file", "-o", default=None, help="Path to save the modified file. Defaults to overwriting the original.")
 @click.option("--output-info", default="report.txt", help="Path to save the TEXT report. Defaults to report.txt")
 
+
 def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tools: str, llm_model: str, llm_temperature: float,
         llm_optimization_level: str, llm_custom_prompt: str, test_framework: str, min_coverage: float,
         coverage_fail_action: str, commit_message: str, no_dynamic_analysis: bool, cache_dir: str, debug: bool,
@@ -826,10 +769,16 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
         console.print(f"[yellow]Effective Configuration: {config_values}[/yellow]")
 
 
+    if api_key and api_key.lower() == "none":
+        api_key = None  # Treat "none" as not provided
+
     if api_base:
-      client = OpenAI(api_key="dummy", base_url=api_base, timeout=OPENAI_TIMEOUT)
+        client = OpenAI(api_key="dummy", base_url=api_base, timeout=OPENAI_TIMEOUT)
+    elif api_key:  # Only create client with api_key if it's actually provided
+        client = OpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT)
     else:
-      client = OpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT)
+        console.print("[red]Error: OpenAI API key not found.  Set OPENAI_API_KEY environment variable, use --config, or --openai-api-key.[/red]")
+        exit(1)
 
     if cache_dir:
         os.makedirs(cache_dir, exist_ok=True)
@@ -859,7 +808,7 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
         )
         if generated_tests:
             tests_generated = True
-        # ...existing code...
+            test_results = run_tests(temp_dir, file_path, test_framework, min_coverage, coverage_fail_action, debug) #run tests, only if generated
 
     new_branch_name = create_branch(repo_obj, file, file_purpose)
 
@@ -892,41 +841,65 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
     if not dry_run:
         console.print("[blue]Commit phase...[/blue]")
 
-        # --- Build the Commit Message ---
-        if commit_message:  # Use custom message if provided
-             final_commit_message = commit_message
+       # --- Build the Commit Message ---
+        base_name = os.path.basename(file_path)
+        summary = f"refactor({base_name}): ✨ Improve code"  # Added an emoji
+        if not llm_success:
+            summary += " (LLM improvements failed)"
+
+        body_lines = []
+        changes_made = []
+
+        if shutil.which("black"):
+            changes_made.append("Formatted with Black")
+        if shutil.which("isort"):
+            changes_made.append("Formatted with isort")
+        if llm_success:
+             changes_made.append(f"Applied LLM improvements (model: {llm_model}, level: {llm_optimization_level})")
+        if tests_generated:
+             changes_made.append("Generated/updated tests")
+
+        if changes_made:
+            body_lines.append("✨ **Changes Made:**")  # More descriptive
+            for change in changes_made:
+                body_lines.append(f"- {change}")  # Use a list format
         else:
-            # 1. Summary Line
-            base_name = os.path.basename(file_path)
-            summary = f"refactor({base_name}): Improve code"
-            if not llm_success:
-                summary += " (LLM improvements failed)"
+            body_lines.append("No changes made.")
 
-            # 2. Detailed Body (Optional, but very helpful)
-            body_lines = []
-            changes_made = []
-            if shutil.which("black"):
-                changes_made.append("Formatted with Black")
-            if shutil.which("isort"):
-                changes_made.append("Formatted with isort")
-            if llm_success:
-                changes_made.append(f"Applied LLM improvements ({llm_optimization_level})")
-            if tests_generated:
-                changes_made.append("Generated/updated tests")
+        # Add static analysis results to the commit body *if* there were errors
+        if analysis_results:
+            has_analysis_errors = False
+            for tool, result in analysis_results.items():
+                if result['returncode'] != 0 and 'returncode' in result:
+                    has_analysis_errors = True
+                    break  # Exit inner loop as soon as we find an error
+
+            if has_analysis_errors:
+                body_lines.append("\n⚠️ **Static Analysis Issues:**")
+                for tool, result in analysis_results.items():
+                    if result['returncode'] != 0 and 'returncode' in result :
+                        body_lines.append(f"  - **{tool}:** {len(result.get('output', '').splitlines())} errors/warnings")
 
 
-            if changes_made:
-                body_lines.append("Changes made:")
-                for change in changes_made:
-                     body_lines.append(f"* {change}")
-            else:
-                body_lines.append("No changes made.")
+        # Add test results to commit body
+        if test_results:
+            test_outcome = "✅ Passed" if test_results['returncode'] == 0 else "❌ Failed"
+            body_lines.append(f"\n🧪 **Test Results:** {test_outcome}")
 
-            # 3. Combine Summary and Body
-            final_commit_message = summary
-            if body_lines:
-                final_commit_message += "\n\n" + "\n".join(body_lines)
+            if "TOTAL" in test_results.get('output', ''):
+                for line in test_results.get('output').splitlines():
+                    if line.lstrip().startswith("TOTAL"):
+                        try:
+                            coverage_percentage = float(line.split()[-1].rstrip("%"))
+                            body_lines.append(f"    - Code Coverage: {coverage_percentage:.2f}%")
+                        except (ValueError, IndexError):
+                            pass
 
+        final_commit_message = summary
+        if body_lines:
+            final_commit_message += "\n\n" + "\n".join(body_lines)
+        if commit_message: #override if custom commit msg
+            final_commit_message = commit_message
         create_commit(repo_obj, file_path, final_commit_message, test_results)
 
 
@@ -983,6 +956,7 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
             min_coverage=min_coverage,
             coverage_fail_action=coverage_fail_action,
             repo_path=temp_dir,
+            categories=categories_list, # pass categories
             debug=debug
         )
     elif local_commit:
