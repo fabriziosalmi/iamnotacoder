@@ -1,12 +1,5 @@
 # FabGPT
 
-[![GitHub version](https://badge.fury.io/gh/efraimgentil%2FFabGPT.svg)](https://badge.fury.io/gh/efraimgentil%2FFabGPT)
-[![PyPI version](https://badge.fury.io/py/FabGPT.svg)](https://badge.fury.io/py/FabGPT)
-![GitHub contributors](https://img.shields.io/github/contributors/efraimgentil/FabGPT)
-![GitHub last commit (branch)](https://img.shields.io/github/last-commit/efraimgentil/FabGPT/main)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/efraimgentil/FabGPT)
-[![Downloads](https://static.pepy.tech/badge/fabgpt)](https://pepy.tech/project/fabgpt)
-
 FabGPT is a command-line tool designed to enhance Python code quality in GitHub repositories.  It leverages Large Language Models (LLMs) to analyze, improve, and generate tests for your code. FabGPT automates the process of code review, refactoring, and test generation, making it easier to maintain high-quality code. It can integrate with various static analysis tools, testing frameworks, and provides flexible configuration options, including custom prompts for fine-grained control over LLM behavior.  The tool supports local-only commits or full pull request creation.  It also includes robust error handling, caching, and reporting.
 
 ## Index
