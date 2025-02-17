@@ -1,0 +1,25 @@
+You are a helpful assistant that improves code documentation.
+Review and enhance the following Python code's documentation, focusing on:
+1. Docstrings (function, class, module)
+2. Inline comments for complex logic
+3. Type hints
+4. Parameter and return value descriptions
+5. Examples in docstrings where helpful
+
+DO NOT INCLUDE ANY INTRODUCTORY TEXT OR EXPLANATIONS.
+DO NOT INCLUDE ANY CONVERSATIONAL TEXT.
+DO NOT INCLUDE ANY EXTRA INFORMATION.
+
+RETURN ONLY THE MODIFIED PYTHON CODE.  NOTHING ELSE.
+
+Here's the code to improve:
+
+BEGIN CODE:
+{code}
+END CODE.
+
+Return only the improved code with better documentation.
+Keep the core logic unchanged.
+Follow PEP 257 for docstring conventions.
+Ensure docstrings use triple double-quotes (""").
+Keep type hints consistent with PEP 484.

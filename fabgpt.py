@@ -941,7 +941,10 @@ def create_commit(
     """Creates a Git commit."""
     try:
         console.print("[blue]Creating commit...[/blue]")
-        repo.git.add(file_path)
+        # Split file_path by comma and add each file individually.
+        files = [fp.strip() for fp in file_path.split(",")]
+        for fp in files:
+            repo.git.add(fp)
         if test_results is not None:
             tests_dir = os.path.join(repo.working_tree_dir, "tests")
             if os.path.exists(tests_dir):
@@ -963,13 +966,15 @@ def create_commit(
         exit(1)
 
 
+
 def create_pull_request(
+    repo_obj: git.Repo,  # <---  Corrected: Now receives git.Repo object
     repo_url: str,
     token: str,
     base_branch: str,
     head_branch: str,
-    commit_message: str,  # Pass the complete commit message
-    analysis_results: Dict[str, Dict[str, Any]],  # Keep these for potential future use
+    commit_message: str,
+    analysis_results: Dict[str, Dict[str, Any]],
     test_results: Dict[str, Any],
     file_path: str,
     optimization_level: str,
@@ -979,14 +984,28 @@ def create_pull_request(
     repo_path: str,
     categories: List[str],
     debug: bool = False,
+    force_push: bool = False,
 ) -> None:
     """Creates a GitHub Pull Request."""
     try:
-        console.print(f"[blue]Creating Pull Request...[/blue]")
+        console.print("[blue]Creating Pull Request...[/blue]")
         g = Github(token)
         repo_name = repo_url.replace("https://github.com/", "")
-        repo = g.get_repo(repo_name)
+        # Use PyGithub to get the repository for PR creation
+        gh_repo = g.get_repo(repo_name)  
 
+        # --- PUSH THE BRANCH ---
+        try:
+            # Use the correct git.Repo object to push
+            if force_push:
+                repo_obj.git.push("--force", "origin", head_branch)
+            else:
+                repo_obj.git.push("origin", head_branch)
+            console.print(f"[green]Branch pushed to GitHub: {head_branch}[/green]")
+        except git.exc.GitCommandError as e:
+            console.print(f"[red]Error pushing branch to GitHub: {e}[/red]")
+            logging.exception("Error pushing branch")
+            exit(1)
 
         # Extract the commit message components
         commit_lines = commit_message.split('\n\n')
@@ -999,11 +1018,11 @@ def create_pull_request(
         for section in commit_lines[1:]:  # Skip the title line
             body += section + "\n\n"
 
-        # Create the PR
-        pr = repo.create_pull(
+        # Create the PR using the PyGithub repo object
+        pr = gh_repo.create_pull(
             title=pr_title,
             body=body,
-            head=f"{g.get_user().login}:{head_branch}",
+            head=f"{g.get_user().login}:{head_branch}",  # Correct head format
             base=base_branch
         )
 
@@ -1014,12 +1033,9 @@ def create_pull_request(
         logging.exception("Error creating Pull Request")
         exit(1)
 
-
 @click.command()
 @click.option("--repo", "-r", required=True, help="GitHub repository URL.")
-@click.option(
-    "--file", "-f", required=True, help="Relative path to the file to improve."
-)
+@click.option("--files", "-f", required=True, help="Comma-separated relative paths to files to improve.")
 @click.option("--branch", "-b", required=True, help="Target branch name.")
 @click.option(
     "--token", "-t", required=True, help="GitHub Personal Access Token (PAT)."
@@ -1136,7 +1152,7 @@ def create_pull_request(
 
 def main(
     repo: str,
-    file: str,
+    files: str,
     branch: str,
     token: str,
     tools: str,
@@ -1209,373 +1225,207 @@ def main(
 
     # --- Repository Cloning and Branch Handling ---
     repo_obj, temp_dir = clone_repository(repo, token)  # Clone the repository
-    file_path = os.path.join(temp_dir, file)  # Construct the full file path
-    checkout_branch(repo_obj, branch)  # Checkout the specified branch
-    file_purpose = get_file_purpose(file_path)  # Determine file purpose
+    files_list = [f.strip() for f in files.split(",")]
+    enriched_commit_messages = []
+    improved_files_info = {}  # file -> commit details
 
-    # Capture original file content before improvements
-    with open(file_path, "r", encoding="utf-8") as f:
-        original_code = f.read()
+    for file in files_list:
+        file_path = os.path.join(temp_dir, file)  # Build full file path
+        checkout_branch(repo_obj, branch)  # Checkout the specified branch
+        file_purpose = get_file_purpose(file_path)  # Determine file purpose
 
-    categories_list = [
-        c.strip() for c in categories.split(",")
-    ]  # Parse categories
+        # Capture original file content before improvements
+        with open(file_path, "r", encoding="utf-8") as f:
+            original_code = f.read()
 
-    # --- Analysis and Test Generation ---
-    analysis_results = {}  # Initialize for later use
-    test_results = None
-    tests_generated = False
+        categories_list = [
+            c.strip() for c in categories.split(",")
+        ]  # Parse categories
 
-    if not no_dynamic_analysis:
-        analysis_results = analyze_project(
+        # --- Analysis and Test Generation ---
+        analysis_results = {}  # Initialize for later use
+        test_results = None
+        tests_generated = False
+
+        if not no_dynamic_analysis:
+            analysis_results = analyze_project(
+                temp_dir,
+                file_path,
+                tools.split(","),
+                exclude_tools.split(","),
+                cache_dir,
+                debug,
+                line_length,  # Pass line length
+            )
+            console.print("[blue]Test generation phase...[/blue]")
+            # Removed nested Progress block here to avoid multiple live displays
+            generated_tests = generate_tests(
+                file_path,
+                client,
+                llm_model,
+                llm_temperature,
+                test_framework,
+                llm_custom_prompt,
+                debug,
+                line_length,  # pass line_length
+            )
+            if generated_tests:  # Only run tests if tests were generated
+                tests_generated = True
+                test_results = run_tests(
+                    temp_dir,
+                    file_path,
+                    test_framework,
+                    min_coverage,
+                    coverage_fail_action,
+                    debug,
+                )
+
+        # --- Branch Creation (for Improvements) ---
+        new_branch_name = create_branch(repo_obj, file, file_purpose)
+
+        # --- File Improvement ---
+        console.print("[blue]File improvement phase...[/blue]")
+        improved_code, llm_success = improve_file(
+            file_path,
+            client,
+            llm_model,
+            llm_temperature,
+            categories_list,
+            llm_custom_prompt,
+            analysis_results,
+            debug,
+            line_length,  # pass line_length
+        )
+
+        # --- Check for Changes ---
+        with open(file_path, "r", encoding="utf-8") as f:
+            new_code = f.read()
+        if new_code.strip() == original_code.strip():
+            console.print(
+                "[yellow]No changes detected. Skipping commit and PR creation.[/yellow]"
+            )
+            exit(0)  # Exit if no changes were made
+
+        # --- Final Static Analysis Report (after modifications) ---
+        final_analysis_results = analyze_project(
             temp_dir,
             file_path,
             tools.split(","),
             exclude_tools.split(","),
             cache_dir,
             debug,
-            line_length,  # Pass line length
+            line_length,
         )
-        console.print("[blue]Test generation phase...[/blue]")
-        # Removed nested Progress block here to avoid multiple live displays
-        generated_tests = generate_tests(
+        # Calculate differences in static analysis results
+        analysis_diff = {}
+        for tool in tools.split(","):
+            if tool in exclude_tools.split(","):
+                continue
+            if tool not in analysis_results or tool not in final_analysis_results:
+                continue  # Skip if tool wasn't run in both
+
+            initial_count = (
+                len(analysis_results[tool].get("output", "").splitlines())
+                if analysis_results[tool]["returncode"] != 0
+                else 0
+            )
+            final_count = (
+                len(final_analysis_results[tool].get("output", "").splitlines())
+                if final_analysis_results[tool]["returncode"] != 0
+                else 0
+            )
+            analysis_diff[tool] = final_count - initial_count
+
+        # --- Save Improved Code (if requested) ---
+        if output_file:
+            try:
+                # Use absolute paths for safety
+                output_file = os.path.abspath(output_file)
+                with open(output_file, "w", encoding="utf-8") as f:
+                    f.write(improved_code)
+                console.print(f"[green]Improved code saved to: {output_file}[/green]")
+            except Exception as e:
+                console.print(
+                    f"[red]Error saving improved code to {output_file}: {e}[/red]"
+                )
+                logging.exception("Error saving improved code to %s", output_file)
+                exit(1)  # Exit on save failure
+
+        # --- Create and Save Info File ---
+        create_info_file(
             file_path,
-            client,
-            llm_model,
-            llm_temperature,
-            test_framework,
-            llm_custom_prompt,
-            debug,
-            line_length,  # pass line_length
+            final_analysis_results,
+            test_results,
+            llm_success,
+            categories_list,
+            llm_optimization_level,
+            output_info,
+            min_coverage,
         )
-        if generated_tests:  # Only run tests if tests were generated
-            tests_generated = True
-            test_results = run_tests(
-                temp_dir,
-                file_path,
+
+        # --- Get LLM Improvement Summary ---
+        llm_improvements_summary = {}
+        if llm_success:
+            llm_improvements_summary = get_llm_improvements_summary(
+                original_code,
+                improved_code,
+                categories_list,
+                client,
+                llm_model,
+                llm_temperature,
+            )
+
+        # --- Check for Changes ---
+        with open(file_path, "r", encoding="utf-8") as f:
+            current_code = f.read()
+        if current_code.strip() != original_code.strip():
+            # Use the file-specific llm improvement summary if available
+            llm_info = llm_improvements_summary.get(file, "No improvements details.")
+            file_commit_message = f"Improved {file}:\n{llm_info}"
+            enriched_commit_messages.append(file_commit_message)
+            improved_files_info[file] = file_commit_message
+
+    final_commit_message = "\n\n".join(enriched_commit_messages)
+
+    # --- Commit and Pull Request (if not dry run) ---
+    pr_url = None
+    if not dry_run:
+        create_commit(repo_obj, ",".join(files_list), final_commit_message, test_results, llm_improvements_summary)
+        if not local_commit:
+            # Pass the CORRECT repo_obj (git.Repo) to create_pull_request
+            create_pull_request(
+                repo_obj,  # <---  Pass the git.Repo object!
+                repo,
+                token,
+                branch,
+                new_branch_name,
+                final_commit_message,
+                final_analysis_results,
+                test_results,
+                files_list[0],  # For single-file compatibility, adjust as needed
+                llm_optimization_level,
                 test_framework,
                 min_coverage,
                 coverage_fail_action,
+                temp_dir,
+                categories_list,
                 debug,
+                force_push # pass the parameter
             )
-
-    # --- Branch Creation (for Improvements) ---
-    new_branch_name = create_branch(repo_obj, file, file_purpose)
-
-    # --- File Improvement ---
-    console.print("[blue]File improvement phase...[/blue]")
-    improved_code, llm_success = improve_file(
-        file_path,
-        client,
-        llm_model,
-        llm_temperature,
-        categories_list,
-        llm_custom_prompt,
-        analysis_results,
-        debug,
-        line_length,  # pass line_length
-    )
-
-    # --- Check for Changes ---
-    with open(file_path, "r", encoding="utf-8") as f:
-        new_code = f.read()
-    if new_code.strip() == original_code.strip():
-        console.print(
-            "[yellow]No changes detected. Skipping commit and PR creation.[/yellow]"
-        )
-        exit(0)  # Exit if no changes were made
-
-    # --- Final Static Analysis Report (after modifications) ---
-    final_analysis_results = analyze_project(
-        temp_dir,
-        file_path,
-        tools.split(","),
-        exclude_tools.split(","),
-        cache_dir,
-        debug,
-        line_length,
-    )
-    # Calculate differences in static analysis results
-    analysis_diff = {}
-    for tool in tools.split(","):
-        if tool in exclude_tools.split(","):
-            continue
-        if tool not in analysis_results or tool not in final_analysis_results:
-            continue  # Skip if tool wasn't run in both
-
-        initial_count = (
-            len(analysis_results[tool].get("output", "").splitlines())
-            if analysis_results[tool]["returncode"] != 0
-            else 0
-        )
-        final_count = (
-            len(final_analysis_results[tool].get("output", "").splitlines())
-            if final_analysis_results[tool]["returncode"] != 0
-            else 0
-        )
-        analysis_diff[tool] = final_count - initial_count
-
-    # --- Save Improved Code (if requested) ---
-    if output_file:
-        try:
-            # Use absolute paths for safety
-            output_file = os.path.abspath(output_file)
-            with open(output_file, "w", encoding="utf-8") as f:
-                f.write(improved_code)
-            console.print(f"[green]Improved code saved to: {output_file}[/green]")
-        except Exception as e:
-            console.print(
-                f"[red]Error saving improved code to {output_file}: {e}[/red]"
-            )
-            logging.exception("Error saving improved code to %s", output_file)
-            exit(1)  # Exit on save failure
-
-    # --- Create and Save Info File ---
-    create_info_file(
-        file_path,
-        final_analysis_results,
-        test_results,
-        llm_success,
-        categories_list,
-        llm_optimization_level,
-        output_info,
-        min_coverage,
-    )
-
-    # --- Get LLM Improvement Summary ---
-    llm_improvements_summary = {}
-    if llm_success:
-        llm_improvements_summary = get_llm_improvements_summary(
-            original_code,
-            improved_code,
-            categories_list,
-            client,
-            llm_model,
-            llm_temperature,
-        )
-
-    # --- Commit and Pull Request (if not dry run) ---
-    if not dry_run:
-        console.print("[blue]Commit phase...[/blue]")
-
-        # --- Build the Commit Message ---
-        base_name = os.path.basename(file_path)
-
-        # Start constructing the commit message.  Use a list to build it up.
-        commit_message_parts = []
-
-        # Determine the main type of commit.  Start with "refactor".
-        commit_type = "refactor"
-
-        # --- Determine the main type based on what happened ---
-        if "bugfix" in categories_list and llm_success:  # Prioritize bugfix
-            commit_type = "fix"
-        elif "feature" in categories_list and llm_success:  # then feature
-            commit_type = "feat"
-        # if there are test generated/updated, add test as part of the type
-        if tests_generated:
-            commit_type = f"{commit_type}, test"
-        # Add the commit type and scope.
-        commit_message_parts.append(f"{commit_type}({base_name}):")
-
-        # Initial summary line:
-        summary = "minor improvements"
-        if not llm_success:
-            summary += " (LLM improvements failed)"
-        commit_message_parts.append(summary)
-        commit_message_parts.append("") # Add a blank line after the summary
-
-
-        # --- Changes Made ---
-        body_lines = []
-        changes_made = []
-
-        body_lines.append("Hi there! 👋 fab minor improvements applied in PR, You can reach me [here](https://github.com/fabriziosalmi) any time ^_^")
-        body_lines.append("Here's the improvements list made to the python script:")
-        body_lines.append("")
-
-        if shutil.which("black"):
-            changes_made.append("Formatted with Black")
-        if shutil.which("isort"):
-            changes_made.append("Formatted with isort")
-        if llm_success:
-            changes_made.append(
-                f"Applied LLM improvements (model: {llm_model}, temperature: {llm_temperature}, optimization: {llm_optimization_level})"
-            )
-        if tests_generated:
-            changes_made.append("Generated/updated tests")
-
-
-        if changes_made:
-            body_lines.append("✨ **Changes Made:**")
-            for change in changes_made:
-                body_lines.append(f"- {change}")
-            body_lines.append("")  # Add empty line AFTER Changes Made
-
-        if analysis_diff:
-            body_lines.append("⚠️ **Static Analysis Improvements:**")
-            for tool, diff in analysis_diff.items():
-                if diff < 0:
-                    body_lines.append(f"- {tool}: Reduced {abs(diff)} errors/warnings")
-                elif diff > 0:
-                    body_lines.append(f"- {tool}: Increased {diff} errors/warnings (check required)")
-            body_lines.append("")  # Add empty line AFTER Static Analysis
-
-        if test_results:
-            test_outcome = "✅ Passed" if test_results["returncode"] == 0 else "❌ Failed"
-            body_lines.append(f"🧪 **Test Results:** {test_outcome}")
-            if "TOTAL" in test_results.get("output", ""):
-                for line in test_results["output"].splitlines():
-                    if line.lstrip().startswith("TOTAL"):
-                        try:
-                            coverage_percentage = float(line.split()[-1].rstrip("%"))
-                            body_lines.append(f"  - Code Coverage: {coverage_percentage:.2f}%")
-                        except (ValueError, IndexError):
-                            body_lines.append("  - Code Coverage: Unable to parse coverage value")
-                        except Exception as e:
-                            logging.warning(f"Unexpected error parsing coverage: {e}")
-            body_lines.append("") # Add empty line AFTER Test Results
-
-
-        if llm_improvements_summary:
-            category_icons = {
-                "style": "🎨",
-                "maintenance": "🛠️",
-                "security": "🔒",
-                "performance": "⚡",
-                "testing": "🧪",
-                "documentation": "📚",
-                "refactor": "♻️",
-                "bugfix": "🐛",
-                "feature": "✨",
-            }
-            for category, improvements in llm_improvements_summary.items():
-                if improvements and improvements != ["Error retrieving improvements."]:
-                    icon = category_icons.get(category.lower(), "✨")
-                    body_lines.append(f"{icon} **{category.capitalize()} improvements:**")
-                    for improvement in improvements:
-                        # Ensure each improvement starts with "-"
-                        if improvement.strip().startswith("-"):
-                            body_lines.append(f"{improvement}")
-                        else:
-                            body_lines.append(f"- {improvement}")
-                    body_lines.append("")  # Add empty line after each category section
-            # Add empty line after all LLM improvements (if any were added)
-            if any(improvements and improvements != ["Error retrieving improvements."]
-                for improvements in llm_improvements_summary.values()):
-                body_lines.append("")
-
-        commit_message_parts.extend(body_lines)
-
-        # --- Combine into the *final* message ---
-        if commit_message:  # If a CLI commit message is provided, use it *instead*
-            final_commit_message = commit_message
-        else:
-            final_commit_message = "\n".join(commit_message_parts) # Use dynamically built
-
-
-        create_commit(
-            repo_obj,
-            file_path,
-            final_commit_message,  # Pass the *complete* message
-            test_results,
-            llm_improvements_summary,
-        )
-
-        # --- Push and Pull Request (if not dry run and not local commit) ---
-
-        if not dry_run and not local_commit:
-            console.print("[blue]Pull Request creation phase...[/blue]")
-            # --- Push the branch (with retry logic) ---
-            push_successful = False
-            for attempt in range(MAX_PUSH_RETRIES):
-                try:
-                    console.print(
-                        f"[blue]Pushing branch: {new_branch_name} (attempt {attempt+1})[/blue]"
-                    )
-                    repo_obj.git.push(
-                        "origin", new_branch_name
-                    )  # Push the branch
-                    console.print(f"[green]Branch pushed successfully.[/green]")
-                    push_successful = True
-                    break  # Exit the retry loop on success
-                except git.exc.GitCommandError as e:
-                    console.print(
-                        f"[yellow]Push failed (attempt {attempt + 1}): {e}[/yellow]"
-                    )
-                    logging.warning(
-                        "Push failed (attempt %d): %s", attempt + 1, e
-                    )
-                    if (
-                        "already exists" in str(e).lower()
-                    ):  # Check for "already exists"
-                        if force_push:
-                            try:
-                                console.print(
-                                    "[yellow]Force pushing branch...[/yellow]"
-                                )
-                                repo_obj.git.push(
-                                    "--force", "origin", new_branch_name
-                                )  # Force push
-                                console.print(
-                                    f"[green]Branch pushed successfully.[/green]"
-                                )
-                                push_successful = True
-                                break
-                            except git.exc.GitCommandError as e:
-                                console.print(f"[red]Error force pushing:[/red] {e}")
-                                logging.exception("Error force pushing")
-                                exit(1)
-                        else:
-                            # Generate a *new* unique branch name and retry
-                            console.print(
-                                "[yellow]Generating a new unique branch"
-                                " name...[/yellow]"
-                            )
-                            new_branch_name = create_branch(
-                                repo_obj, file_path, file_purpose
-                            )  # Create new branch name
-                    else:
-                        # Some other error occurred during push, exit
-                        console.print(f"[red]Error pushing branch:[/red] {e}")
-                        logging.exception("Error pushing branch")
-                        exit(1)
-
-            if not push_successful:
-                console.print(
-                    f"[red]Failed to push branch after {MAX_PUSH_RETRIES} attempts. Aborting.[/red]"
-                )
-                exit(1)
-
-            # --- Create the Pull Request ---
-            create_pull_request(
-                repo_url=repo,
-                token=token,
-                base_branch=branch,
-                head_branch=new_branch_name,
-                commit_message=final_commit_message,
-                analysis_results=final_analysis_results,
-                test_results=test_results,
-                file_path=file_path,
-                optimization_level=llm_optimization_level,
-                test_framework=test_framework,
-                min_coverage=min_coverage,
-                coverage_fail_action=coverage_fail_action,
-                repo_path=temp_dir,
-                categories=categories_list,
-                debug=debug,
-            )
-        elif local_commit:
-            console.print(
-                "[yellow]Local commit performed: no Pull Request created.[/yellow]"
-            )
-        else:  # Handle dry run
-            console.print(
-                "[yellow]Dry run performed: no changes made to the remote"
-                " files.[/yellow]"
-            )
-            if not output_file:  # Only restore if not saving to output file
-                restore_backup(file_path, file_path + ".bak")
+    # --- Save JSON Log with additional info ---
+    log_data = {
+        "repository": repo,
+        "branch": branch,
+        "files_improved": improved_files_info,
+        "commit_message": final_commit_message,
+        "pr_url": pr_url,
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+    log_dir = os.path.join("/Users/fab/GitHub/FabGPT", "logs") # set your correct log dir
+    os.makedirs(log_dir, exist_ok=True)
+    log_file_path = os.path.join(log_dir, f"log_{int(time.time())}.json")
+    with open(log_file_path, "w", encoding="utf-8") as log_file:
+        json.dump(log_data, log_file, indent=4)
 
     # --- Cleanup ---
     if not debug:
