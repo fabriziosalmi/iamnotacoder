@@ -1,61 +1,36 @@
 import math
-import logging
-
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
 
 def add(a: int, b: int) -> int:
-    """Add two integers."""
+    """Return the sum of two integers."""
     return a + b
 
-
 def subtract(a: int, b: int) -> int:
-    """Subtract two integers."""
+    """Return the difference between two integers."""
     return a - b
 
-
 def multiply(a: int, b: int) -> int:
-    """Multiply two integers."""
+    """Return the product of two integers."""
     return a * b
 
-
 def divide(a: float, b: float) -> float:
-    """Divide two numbers. Raises ValueError if divisor is zero.
-    
-    Args:
-        a (float): The dividend.
-        b (float): The divisor.
-        
-    Returns:
-        float: The quotient.
-        
-    Raises:
-        ValueError: If b is zero.
-    """
+    """Return the quotient of two floats. Raises ValueError if divisor is zero."""
     if b == 0:
-        logging.error("Cannot divide by zero.")
-        raise ValueError("Cannot divide by zero.")
+        raise ValueError("Cannot divide by zero")
     return a / b
 
-
 def factorial(n: int) -> int:
-    """Calculate the factorial of a non-negative integer using recursion.
-    
-    Args:
-        n (int): The number to calculate the factorial for.
-        
-    Returns:
-        int: The factorial of n.
-    """
-    if n == 0:
+    """Return the factorial of a non-negative integer."""
+    if n < 0:
+        raise ValueError("Factorial is not defined for negative numbers")
+    elif n == 0:
         return 1
     else:
-        return n * factorial(n - 1)
-
+        result = 1
+        for i in range(2, n + 1):
+            result *= i
+        return result
 
 def main():
-    """Main function to demonstrate basic operations."""
-    # Some hardcoded values for testing
     x = 10
     y = 5
 
@@ -65,14 +40,10 @@ def main():
     print("Division:", divide(x, y))
     print("Factorial of 5:", factorial(5))
 
-    # Avoid unnecessary global variable usage
     result = add(x, y)
 
-    # Optimize the loop to avoid repeated calculations
-    sqrt_results = [math.sqrt(i) for i in range(10)]
-    for i, sqrt_val in enumerate(sqrt_results):
-        print(f"Square root of {i} is {sqrt_val:.2f}")
-
+    for i in range(10):
+        print(f"Square root of {i} is {math.sqrt(i)}")
 
 if __name__ == "__main__":
     main()

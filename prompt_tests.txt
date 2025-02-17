@@ -1,4 +1,4 @@
-Generate pytest unit tests for the following Python code (file: `{file_base_name}.py`).  Make sure to cover all functions and classes, including edge cases and error handling. Include any necessary imports.  The code is:
+Generate pytest unit tests for the following Python code (file: `{file_base_name}.py`).  Make sure to cover main functions and classes, including error handling. Include any necessary imports.  The code is:
 
 ```python
 {code}
