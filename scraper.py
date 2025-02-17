@@ -11,6 +11,7 @@ from rich.progress import Progress
 import concurrent.futures
 import re
 import random
+import logging
 
 # Initialize Rich console
 console = Console()
@@ -21,9 +22,17 @@ MAX_RETRIES = 3
 RETRY_DELAY = 5
 RATE_LIMIT_CHECK_INTERVAL = 5  # Check rate limit every 5 requests
 
+# Setup logging
+logging.basicConfig(
+    filename="scraper.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+
 
 class GitHubAPIError(Exception):
     """Custom exception for GitHub API errors."""
+
     pass
 
 
@@ -45,9 +54,13 @@ def make_github_request(url, headers, params=None, method="GET", data=None, requ
 
         except requests.exceptions.RequestException as e:
             if attempt == MAX_RETRIES - 1:
+                logging.error(f"Failed to make request to {url} after {MAX_RETRIES} attempts: {e}")
                 raise GitHubAPIError(f"Failed to make request to {url} after {MAX_RETRIES} attempts: {e}") from e
             wait_time = RETRY_DELAY * (2 ** attempt)
-            console.print(f"[yellow]Request failed: {e}. Retrying in {wait_time} seconds... (Attempt {attempt + 1}/{MAX_RETRIES})[/yellow]")
+            console.print(
+                f"[yellow]Request failed: {e}. Retrying in {wait_time} seconds... (Attempt {attempt + 1}/{MAX_RETRIES})[/yellow]"
+            )
+            logging.warning(f"Request failed: {e}. Retrying in {wait_time} seconds... (Attempt {attempt + 1}/{MAX_RETRIES})")
             time.sleep(wait_time)
 
     return None
@@ -57,7 +70,7 @@ def get_rate_limit_status(token):
     """Fetches and returns the current rate limit status."""
     headers = {
         "Authorization": f"token {token}",
-        "User-Agent": "GitHub-Repo-Scraper/1.0"
+        "User-Agent": "GitHub-Repo-Scraper/1.0",
     }
     try:
         data = make_github_request(f"{GITHUB_API_URL}/rate_limit", headers=headers)
@@ -65,27 +78,26 @@ def get_rate_limit_status(token):
             return {
                 "core": {
                     "remaining": data["resources"]["core"]["remaining"],
-                    "reset": data["resources"]["core"]["reset"]
+                    "reset": data["resources"]["core"]["reset"],
                 },
                 "search": {
                     "remaining": data["resources"]["search"]["remaining"],
-                    "reset": data["resources"]["search"]["reset"]
-                }
+                    "reset": data["resources"]["search"]["reset"],
+                },
             }
     except GitHubAPIError as e:
         console.print(f"[red]Error getting rate limit status: {e}[/red]")
+        logging.error(f"Error getting rate limit status: {e}")
     return None
 
 
-def search_repositories(token, max_repos):
-    """Search for Python repositories, respecting search rate limits."""
+def search_repositories(token, max_repos, start_date, end_date):
+    """Search for Python repositories, respecting search rate limits, within a date range."""
     headers = {
         "Authorization": f"token {token}",
-        "User-Agent": "GitHub-Repo-Scraper/1.0"
+        "User-Agent": "GitHub-Repo-Scraper/1.0",
     }
-    query_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
-    query = f"language:python"
-    # query = f"language:python pushed:<{query_date}"  # Original query
+    query = f"language:python pushed:{start_date}..{end_date}"
 
     repos = []
     page = 1
@@ -101,15 +113,19 @@ def search_repositories(token, max_repos):
             # Check rate limit every few requests
             if request_count[0] % RATE_LIMIT_CHECK_INTERVAL == 0:
                 rate_limit = get_rate_limit_status(token)
-                if rate_limit and rate_limit["search"]["remaining"] <= 5: # Give a buffer
+                if rate_limit and rate_limit["search"]["remaining"] <= 5:  # Give a buffer
                     reset_time = datetime.fromtimestamp(rate_limit["search"]["reset"])
                     wait_time = (reset_time - datetime.now()).total_seconds() + 1
                     wait_time = max(0, wait_time)
-                    console.print(f"[yellow]Search rate limit low. Waiting until {reset_time.strftime('%Y-%m-%d %H:%M:%S')} ({wait_time:.0f} seconds)[/yellow]")
+                    console.print(
+                        f"[yellow]Search rate limit low. Waiting until {reset_time.strftime('%Y-%m-%d %H:%M:%S')} ({wait_time:.0f} seconds)[/yellow]"
+                    )
+                    logging.warning(
+                        f"Search rate limit low. Waiting until {reset_time.strftime('%Y-%m-%d %H:%M:%S')} ({wait_time:.0f} seconds)"
+                    )
                     time.sleep(wait_time)
 
             try:
-                # print(f"DEBUG: Using token: {token}")  # Remove or comment out in final version
                 data = make_github_request(
                     f"{GITHUB_API_URL}/search/repositories",
                     headers=headers,
@@ -120,16 +136,15 @@ def search_repositories(token, max_repos):
                         "per_page": current_page_size,
                         "page": page,
                     },
-                    request_count=request_count  # Pass the request counter
+                    request_count=request_count,  # Pass the request counter
                 )
 
                 if "items" not in data or not data["items"]:
                     break
 
                 for item in data["items"]:
-                    if item.get("default_branch") == "main":
-                        repos.append(item)
-                        progress.update(task, advance=1)
+                    repos.append(item) # add all default branch
+                    progress.update(task, advance=1)
                     if len(repos) >= max_repos:
                         break
 
@@ -137,6 +152,7 @@ def search_repositories(token, max_repos):
 
             except GitHubAPIError as e:
                 console.print(f"[red]Error during repository search: {e}[/red]")
+                logging.error(f"Error during repository search: {e}")
                 break  # Important:  Exit the loop on error
         progress.update(task, completed=len(repos))
 
@@ -147,19 +163,23 @@ def get_file_content_and_stats(token, repo_full_name, file_path, request_count):
     """Gets file content, line count, and comment ratio."""
     headers = {
         "Authorization": f"token {token}",
-        "User-Agent": "GitHub-Repo-Scraper/1.0"
+        "User-Agent": "GitHub-Repo-Scraper/1.0",
     }
     try:
         file_data = make_github_request(
             f"{GITHUB_API_URL}/repos/{repo_full_name}/contents/{file_path}",
             headers=headers,
-            request_count=request_count
+            request_count=request_count,
         )
 
         if "content" in file_data:
             decoded_content = base64.b64decode(file_data["content"]).decode("utf-8", errors="replace")
             lines = decoded_content.splitlines()
             num_lines = len(lines)
+
+            # Handle empty files
+            if num_lines == 0:
+                return "", 0, 0.0
 
             comment_lines = 0
             for line in lines:
@@ -176,6 +196,7 @@ def get_file_content_and_stats(token, repo_full_name, file_path, request_count):
 
     except GitHubAPIError as e:
         console.print(f"[red]Error getting file stats for {repo_full_name}/{file_path}: {e}[/red]")
+        logging.error(f"Error getting file stats for {repo_full_name}/{file_path}: {e}")
     return "", 0, 0.0
 
 
@@ -183,7 +204,7 @@ def find_python_files(token, repo_full_name, min_lines, max_lines, quality_thres
     """Finds Python files meeting line count and quality criteria."""
     headers = {
         "Authorization": f"token {token}",
-        "User-Agent": "GitHub-Repo-Scraper/1.0"
+        "User-Agent": "GitHub-Repo-Scraper/1.0",
     }
     results = []
 
@@ -196,22 +217,26 @@ def find_python_files(token, repo_full_name, min_lines, max_lines, quality_thres
 
         for file in files:
             if file["type"] == "file" and file["name"].endswith(".py"):
-                _, num_lines, comment_ratio = get_file_content_and_stats(token, repo_full_name, file["path"], request_count)
+                _, num_lines, comment_ratio = get_file_content_and_stats(
+                    token, repo_full_name, file["path"], request_count
+                )
 
                 if min_lines <= num_lines <= max_lines and comment_ratio >= quality_threshold:
                     results.append((file["path"], num_lines, comment_ratio))
 
     except GitHubAPIError as e:
         console.print(f"[red]Error during file search in {repo_full_name}: {e}[/red]")
+        logging.error(f"Error during file search in {repo_full_name}: {e}")
 
     return results
 
 
-def create_unique_filename(base_name, max_repos, min_lines, max_lines, quality_threshold, extension):
+def create_unique_filename(base_name, max_repos, min_lines, max_lines, quality_threshold, start_date, end_date, extension):
     """Creates a unique filename including all filter parameters."""
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    return f"{timestamp}-{max_repos}repos-Min{min_lines}-Max{max_lines}-Quality{quality_threshold}.{extension}"
-
+    start_date_str = start_date.replace("-", "")
+    end_date_str = end_date.replace("-", "")
+    return f"{timestamp}-{max_repos}repos-Min{min_lines}-Max{max_lines}-Quality{quality_threshold}-{start_date_str}-{end_date_str}.{extension}"
 
 def load_existing_data(directory):
     """Loads existing data from JSON files."""
@@ -228,11 +253,13 @@ def load_existing_data(directory):
                                 existing_data.add((item["repo_url"], item["python_file"]))
             except (json.JSONDecodeError, FileNotFoundError) as e:
                 console.print(f"[yellow]Warning: Could not read {filename}: {e}[/yellow]")
+                logging.warning(f"Could not read {filename}: {e}")
     return existing_data
 
 
-def process_repository(token, repo, min_lines, max_lines, quality_threshold, initial_existing_data,
-                       processed_files, processed_files_lock, progress, task_id):
+def process_repository(
+    token, repo, min_lines, max_lines, quality_threshold, initial_existing_data, processed_files, processed_files_lock, progress, task_id
+):
     """Processes a single repository, thread-safe, with combined filters and adaptive delays."""
     repo_name = repo["full_name"]
     repo_url = repo["html_url"]
@@ -246,7 +273,12 @@ def process_repository(token, repo, min_lines, max_lines, quality_threshold, ini
         reset_time = datetime.fromtimestamp(rate_limit["core"]["reset"])
         wait_time = (reset_time - datetime.now()).total_seconds() + 1
         wait_time = max(0, wait_time)
-        console.print(f"[yellow]Core rate limit low. Waiting until {reset_time.strftime('%Y-%m-%d %H:%M:%S')} ({wait_time:.0f} seconds)[/yellow]")
+        console.print(
+            f"[yellow]Core rate limit low. Waiting until {reset_time.strftime('%Y-%m-%d %H%M:%S')} ({wait_time:.0f} seconds)[/yellow]"
+        )
+        logging.warning(
+            f"Core rate limit low. Waiting until {reset_time.strftime('%Y-%m-%d %H:%M:%S')} ({wait_time:.0f} seconds)"
+        )
         time.sleep(wait_time)
 
     python_files = find_python_files(token, repo_name, min_lines, max_lines, quality_threshold, request_count)
@@ -255,27 +287,32 @@ def process_repository(token, repo, min_lines, max_lines, quality_threshold, ini
         if (repo_url, file_path) not in initial_existing_data:
             with processed_files_lock:
                 if (repo_url, file_path) not in processed_files:
-                    results.append({
-                        "repo_url": repo_url,
-                        "python_file": file_path,
-                        "num_lines": num_lines,
-                        "comment_ratio": comment_ratio,
-                    })
+                    results.append(
+                        {
+                            "repo_url": repo_url,
+                            "python_file": file_path,
+                            "num_lines": num_lines,
+                            "comment_ratio": comment_ratio,
+                        }
+                    )
                     processed_files.add((repo_url, file_path))
         else:
             skipped_count += 1
 
-
         # Check rate limit *within* the loop, every few requests
         if request_count[0] % RATE_LIMIT_CHECK_INTERVAL == 0:
             rate_limit = get_rate_limit_status(token)
-            if rate_limit and rate_limit["core"]["remaining"] <= 20: # Even more cautious
+            if rate_limit and rate_limit["core"]["remaining"] <= 20:  # Even more cautious
                 reset_time = datetime.fromtimestamp(rate_limit["core"]["reset"])
                 wait_time = (reset_time - datetime.now()).total_seconds() + 1
                 wait_time = max(0, wait_time)
-                console.print(f"[yellow]Core rate limit getting low. Waiting until {reset_time.strftime('%Y-%m-%d %H:%M:%S')} ({wait_time:.0f} seconds)[/yellow]")
+                console.print(
+                    f"[yellow]Core rate limit getting low. Waiting until {reset_time.strftime('%Y-%m-%d %H:%M:%S')} ({wait_time:.0f} seconds)[/yellow]"
+                )
+                logging.warning(
+                    f"Core rate limit getting low. Waiting until {reset_time.strftime('%Y-%m-%d %H:%M:%S')} ({wait_time:.0f} seconds)"
+                )
                 time.sleep(wait_time)
-
 
     progress.update(task_id, advance=1)
 
@@ -303,10 +340,11 @@ def main():
     parser.add_argument("--output", default="output", help="Base name for output")
     parser.add_argument("--min-lines", type=int, default=1, help="Minimum number of lines")
     parser.add_argument("--max-lines", type=int, default=100, help="Maximum number of lines")
-    parser.add_argument("--quality-threshold", type=float, default=0.0,
-                        help="Minimum comment-to-code ratio (percentage)")
-    parser.add_argument("--max-workers", type=int, default=5,
-                        help="Maximum number of concurrent workers (threads)")
+    parser.add_argument("--quality-threshold", type=float, default=0.0, help="Minimum comment-to-code ratio (percentage)")
+    parser.add_argument("--max-workers", type=int, default=5, help="Maximum number of concurrent workers (threads)")
+    parser.add_argument("--start-date", type=str, default=(datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d"), help="Start date for repository search (YYYY-MM-DD)")
+    parser.add_argument("--end-date", type=str, default=datetime.now().strftime("%Y-%m-%d"), help="End date for repository search (YYYY-MM-DD)")
+
     args = parser.parse_args()
 
     max_repos = args.max_repos
@@ -315,12 +353,26 @@ def main():
     max_lines = args.max_lines
     quality_threshold = args.quality_threshold
     max_workers = args.max_workers
+    start_date = args.start_date
+    end_date = args.end_date
+
+    try:
+        start_date_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_date_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        if start_date_dt > end_date_dt:
+            console.print("[red]Error: --start-date cannot be after --end-date[/red]")
+            return
+    except ValueError:
+        console.print("[red]Error: Invalid date format. Please use YYYY-MM-DD.[/red]")
+        return
 
     if min_lines > max_lines:
         console.print("[red]Error: --min-lines cannot be greater than --max-lines[/red]")
         return
 
-    output_file = create_unique_filename(output_base_name, max_repos, min_lines, max_lines, quality_threshold, "json")
+    output_file = create_unique_filename(
+        output_base_name, max_repos, min_lines, max_lines, quality_threshold, start_date, end_date, "json"
+    )
     script_directory = os.path.dirname(os.path.abspath(__file__))
 
     processed_files_lock = threading.Lock()
@@ -332,8 +384,10 @@ def main():
         console.print("[red]Failed to retrieve initial rate limit status. Exiting.[/red]")
         return
 
-    console.print(f"[green]Initial Rate Limit Status: Core Remaining: {rate_limit_status['core']['remaining']}, Search Remaining: {rate_limit_status['search']['remaining']}[/green]")
-    repos = search_repositories(token, max_repos)
+    console.print(
+        f"[green]Initial Rate Limit Status: Core Remaining: {rate_limit_status['core']['remaining']}, Search Remaining: {rate_limit_status['search']['remaining']}[/green]"
+    )
+    repos = search_repositories(token, max_repos, start_date, end_date)
 
     all_results = []
     total_skipped = 0
@@ -346,9 +400,17 @@ def main():
                 initial_existing_data_copy = existing_data.copy()
                 futures.append(
                     executor.submit(
-                        process_repository, token, repo, min_lines, max_lines, quality_threshold,
-                        initial_existing_data_copy, processed_files,
-                        processed_files_lock, progress, task_id
+                        process_repository,
+                        token,
+                        repo,
+                        min_lines,
+                        max_lines,
+                        quality_threshold,
+                        initial_existing_data_copy,
+                        processed_files,
+                        processed_files_lock,
+                        progress,
+                        task_id,
                     )
                 )
 
@@ -359,6 +421,7 @@ def main():
                     total_skipped += skipped_count
                 except Exception as e:
                     console.print(f"[red]Error processing a repository: {e}[/red]")
+                    logging.exception(f"Error processing a repository: {e}")
 
     console.print(f"[cyan]{len(all_results)} Items added to JSON[/cyan]")
     console.print(f"[yellow]{total_skipped} Items skipped (already present)[/yellow]")
