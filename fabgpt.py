@@ -1071,15 +1071,27 @@ def create_commit(
             if os.path.exists(tests_dir):
                 repo.git.add(tests_dir)
 
-        # Construct commit message with LLM improvement details
+        # Construct the PR body
         if llm_improvements_summary:
             body = ""
+            # Define category icons
+            category_icons = {
+                "style": "🎨",
+                "maintenance": "🛠️",
+                "security": "🔒",
+                "performance": "⚡",
+                "testing": "🧪",
+                "documentation": "📚",
+                "refactor": "♻️",
+                "bugfix": "🐛",
+                "feature": "✨",
+            }
+            
             for category, improvements in llm_improvements_summary.items():
-                if (
-                    improvements
-                    and improvements != ["Error retrieving improvements."]
-                ):
-                    body += f"\n**{category.capitalize()} Improvements:**\n"
+                if improvements and improvements != ["Error retrieving improvements."]:
+                    # Get the icon for the category, default to "✨" if not found
+                    icon = category_icons.get(category.lower(), "✨")
+                    body += f"\n{icon} **{category.capitalize()} Improvements:**\n"
                     for improvement in improvements:
                         body += f"- {improvement}\n"
             commit_message += "\n\n" + body.strip()

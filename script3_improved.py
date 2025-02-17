@@ -2,39 +2,42 @@ import math
 
 
 def add(a: int, b: int) -> int:
-    """Add two integers and return the result."""
+    """Return the sum of two integers."""
     return a + b
 
 
 def subtract(a: int, b: int) -> int:
-    """Subtract two integers and return the result."""
+    """Return the difference between two integers."""
     return a - b
 
 
-def multiply(a: float, b: float) -> float:
-    """Multiply two numbers and return the result."""
+def multiply(a: int, b: int) -> int:
+    """Return the product of two integers."""
     return a * b
 
 
 def divide(a: float, b: float) -> float:
-    """Divide two numbers and return the result. Handle division by zero."""
+    """Return the quotient of two floats.
+
+    Raises:
+        ValueError: If divisor is zero.
+    """
     if b == 0:
         raise ValueError("Cannot divide by zero")
     return a / b
 
 
 def factorial(n: int) -> int:
-    """Calculate the factorial of a number using an iterative approach for better performance."""
+    """Return the factorial of a non-negative integer."""
     if n < 0:
-        raise ValueError("Factorial is not defined for negative numbers")
+        raise ValueError("Input must be a non-negative integer")
     result = 1
     for i in range(2, n + 1):
         result *= i
     return result
 
 
-def main() -> None:
-    """Main function to demonstrate basic operations."""
+def main():
     x = 10
     y = 5
 
@@ -45,8 +48,10 @@ def main() -> None:
     print("Factorial of 5:", factorial(5))
 
     result = add(x, y)
-    print("Result of addition:", result)
 
     for i in range(10):
-        if i >= 0:
-            print(f"Square root of {i} is {math.sqrt(i)}")
+        print(f"Square root of {i} is {math.sqrt(i)}")
+
+
+if __name__ == "__main__":
+    main()
