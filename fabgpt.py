@@ -901,6 +901,18 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
     final_analysis_results = analyze_project(
         temp_dir, file_path, tools.split(","), exclude_tools.split(","), cache_dir, debug, line_length
     )
+    # Calculate differences in static analysis results
+    analysis_diff = {}
+    for tool in tools.split(","):
+        if tool in exclude_tools.split(","):
+            continue
+        if tool not in analysis_results or tool not in final_analysis_results:
+            continue  # Skip if tool wasn't run in both
+
+        initial_count = len(analysis_results[tool].get('output', '').splitlines()) if analysis_results[tool]['returncode'] !=0 else 0
+        final_count = len(final_analysis_results[tool].get('output', '').splitlines()) if final_analysis_results[tool]['returncode'] !=0 else 0
+        analysis_diff[tool] = final_count - initial_count
+
 
     # --- Save Improved Code (if requested) ---
     if output_file:
@@ -947,19 +959,16 @@ def main(repo: str, file: str, branch: str, token: str, tools: str, exclude_tool
         else:
             body_lines.append("No changes made.")
 
-        # Add static analysis results to the commit body *if* there were errors
-        if final_analysis_results:
-            has_analysis_errors = False
-            for tool, result in final_analysis_results.items():
-                if result['returncode'] != 0 and 'returncode' in result:
-                    has_analysis_errors = True
-                    break  # Exit inner loop as soon as we find an error
-
-            if has_analysis_errors:
-                body_lines.append("\n⚠️ **Static Analysis Issues:**")
-                for tool, result in final_analysis_results.items():
-                    if result['returncode'] != 0 and 'returncode' in result :
-                        body_lines.append(f"  - **{tool}:** {len(result.get('output', '').splitlines())} errors/warnings")
+        # Add static analysis *differences* to commit body
+        if analysis_diff:
+            body_lines.append("\n⚠️ **Static Analysis Improvements:**")
+            for tool, diff in analysis_diff.items():
+                if diff < 0:
+                    body_lines.append(f"  - **{tool}:** Reduced {abs(diff)} errors/warnings")
+                elif diff > 0:
+                    body_lines.append(f"  - **{tool}:** Increased {diff} errors/warnings (check required)")
+                # else:  # Don't report if no change (diff == 0)
+                #    body_lines.append(f"  - **{tool}:** No change in errors/warnings")
 
         # Add test results to commit body
         if test_results:
