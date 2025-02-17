@@ -7,3 +7,4 @@ logs/
 *.json
 report.txt
 report.txt
+scraper.log
