@@ -1,77 +1,52 @@
 import math
+import logging
 
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
 
 def add(a: int, b: int) -> int:
-    """Add two numbers.
-
-    Args:
-        a (int): The first number.
-        b (int): The second number.
-
-    Returns:
-        int: The sum of the two numbers.
-    """
+    """Add two integers."""
     return a + b
 
 
 def subtract(a: int, b: int) -> int:
-    """Subtract two numbers.
-
-    Args:
-        a (int): The first number.
-        b (int): The second number.
-
-    Returns:
-        int: The difference between the two numbers.
-    """
+    """Subtract two integers."""
     return a - b
 
 
 def multiply(a: int, b: int) -> int:
-    """Multiply two numbers.
-
-    Args:
-        a (int): The first number.
-        b (int): The second number.
-
-    Returns:
-        int: The product of the two numbers.
-    """
+    """Multiply two integers."""
     return a * b
 
 
 def divide(a: float, b: float) -> float:
-    """Divide two numbers. Does not handle division by zero.
-
+    """Divide two numbers. Raises ValueError if divisor is zero.
+    
     Args:
-        a (float): The numerator.
-        b (float): The denominator.
-
+        a (float): The dividend.
+        b (float): The divisor.
+        
     Returns:
-        float: The quotient of the two numbers.
-
+        float: The quotient.
+        
     Raises:
-        ValueError: If the denominator is zero.
+        ValueError: If b is zero.
     """
     if b == 0:
-        raise ValueError("Cannot divide by zero")
+        logging.error("Cannot divide by zero.")
+        raise ValueError("Cannot divide by zero.")
     return a / b
 
 
 def factorial(n: int) -> int:
-    """Calculate the factorial of a number using recursion.
-
+    """Calculate the factorial of a non-negative integer using recursion.
+    
     Args:
         n (int): The number to calculate the factorial for.
-
+        
     Returns:
-        int: The factorial of the number.
-
-    Raises:
-        ValueError: If the number is negative.
+        int: The factorial of n.
     """
-    if n < 0:
-        raise ValueError("Factorial is not defined for negative numbers")
     if n == 0:
         return 1
     else:
@@ -90,14 +65,13 @@ def main():
     print("Division:", divide(x, y))
     print("Factorial of 5:", factorial(5))
 
-    # Avoid global variables
+    # Avoid unnecessary global variable usage
     result = add(x, y)
 
-    # Optimize loop
-    for i in range(10):
-        if i >= len(math.sqrt.__code__.co_varnames):
-            break
-        print("Square root of", i, "is", math.sqrt(i))
+    # Optimize the loop to avoid repeated calculations
+    sqrt_results = [math.sqrt(i) for i in range(10)]
+    for i, sqrt_val in enumerate(sqrt_results):
+        print(f"Square root of {i} is {sqrt_val:.2f}")
 
 
 if __name__ == "__main__":
