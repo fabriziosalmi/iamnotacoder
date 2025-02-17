@@ -20,16 +20,19 @@ import re
 import uuid
 import logging
 import difflib
+from rich.logging import RichHandler
 
 console = Console()
 
-# Configure logging
+# Configure logging with Rich handler
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+    level=logging.INFO,
+    format="%(message)s",
+    handlers=[RichHandler(rich_tracebacks=True)]
 )
 
 # Constants
-DEFAULT_LLM_MODEL: str = "qwen2.5-coder-7b-instruct"  # Default model
+DEFAULT_LLM_MODEL: str = "qwen2.5-coder-14b-instruct-mlx"  # Default model
 DEFAULT_LLM_TEMPERATURE: float = 0.2
 MAX_SYNTAX_RETRIES: int = 5
 MAX_LLM_RETRIES: int = 3
@@ -1533,7 +1536,7 @@ def main(
         commit_message_parts.append(f"{commit_type}({base_name}):")
 
         # Initial summary line:
-        summary = "✨ Improve code"
+        summary = "minor improvements"
         if not llm_success:
             summary += " (LLM improvements failed)"
         commit_message_parts.append(summary)
@@ -1602,10 +1605,18 @@ def main(
             for category, improvements in llm_improvements_summary.items():
                 if improvements and improvements != ["Error retrieving improvements."]:
                     icon = category_icons.get(category.lower(), "✨")
-                    body_lines.append(f"{icon} **{category.capitalize()} Improvements:**")
+                    body_lines.append(f"{icon} **{category.capitalize()} improvements:**")
                     for improvement in improvements:
-                        body_lines.append(f"- {improvement}")
-            body_lines.append("")  # Add empty line AFTER LLM Improvements
+                        # Ensure each improvement starts with "-"
+                        if improvement.strip().startswith("-"):
+                            body_lines.append(f"{improvement}")
+                        else:
+                            body_lines.append(f"- {improvement}")
+                    body_lines.append("")  # Add empty line after each category section
+            # Add empty line after all LLM improvements (if any were added)
+            if any(improvements and improvements != ["Error retrieving improvements."] 
+                  for improvements in llm_improvements_summary.values()):
+                body_lines.append("")
 
 
         if body_lines:
