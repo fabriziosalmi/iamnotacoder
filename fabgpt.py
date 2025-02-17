@@ -8,10 +8,10 @@ from openai import OpenAI, Timeout
 import datetime
 import shutil
 from rich.console import Console
-from rich.progress import Progress
+from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn
 from rich.table import Table
 import json
-from github import Auth, GitHub  # Corrected import
+from github import GitHub  # Import only Github
 import hashlib
 import time
 import ast
@@ -242,12 +242,16 @@ def analyze_project(
 
     results = {}
     console.print("[blue]Running static analysis...[/blue]")
+   
+    # Use a consistent Progress object
     with Progress(
-        "[progress.description]{task.description}",
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
         "•",
-        "[progress.percentage]{task.percentage:>3.0f}%",
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         "•",
-        "[progress.completed]{task.completed}/{task.total}",
+        TextColumn("[progress.completed]{task.completed}/{task.total}"),
+        TimeElapsedColumn(),
         transient=True,
     ) as progress:
         analysis_task = progress.add_task("Analyzing...", total=len(tools))
@@ -435,10 +439,13 @@ def improve_file(
         improved_code = f.read()  # Initial code (after formatting)
 
     total_success = True  # Track overall success across categories
+
     with Progress(
-        "[progress.description]{task.description}",
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
         "•",
-        "[progress.percentage]{task.percentage:>3.0f}%",
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
         transient=True,
     ) as progress:
         improve_task = progress.add_task(
@@ -1105,9 +1112,8 @@ def create_pull_request(
     """Creates a GitHub Pull Request."""
     try:
         console.print(f"[blue]Creating Pull Request...[/blue]")
-        # Use Auth.Token for the token
-        auth = Auth.Token(token)
-        g = GitHub(auth=auth)  # Authenticate with GitHub
+        # Authenticate using the token directly
+        g = GitHub(token)
         repo_name = repo_url.replace(
             "https://github.com/", ""
         )  # Extract repo name
@@ -1340,6 +1346,8 @@ def create_pull_request(
     default=DEFAULT_LINE_LENGTH,
     help="Maximum line length for code formatting.",
 )  # Added line-length
+
+
 def main(
     repo: str,
     file: str,
@@ -1368,7 +1376,7 @@ def main(
     output_file: str,
     output_info: str,
     line_length: int,
-) -> None:  # Added line_length
+) -> None:
     """
     Improves a Python file in a GitHub repository, generates tests, and creates a Pull Request.
     """
@@ -1654,7 +1662,7 @@ def main(
             for attempt in range(MAX_PUSH_RETRIES):
                 try:
                     console.print(
-                        "Pushing branch: {new_branch_name} (attempt {attempt+1})"
+                        f"[blue]Pushing branch: {new_branch_name} (attempt {attempt+1})[/blue]"
                     )
                     repo_obj.git.push(
                         "origin", new_branch_name
@@ -1664,7 +1672,7 @@ def main(
                     break  # Exit the retry loop on success
                 except git.exc.GitCommandError as e:
                     console.print(
-                        "[yellow]Push failed (attempt {attempt + 1}): {e}[/yellow]"
+                        f"[yellow]Push failed (attempt {attempt + 1}): {e}[/yellow]"
                     )
                     logging.warning(
                         "Push failed (attempt %d): %s", attempt + 1, e
@@ -1706,8 +1714,7 @@ def main(
 
             if not push_successful:
                 console.print(
-                    "Failed to push branch after {MAX_PUSH_RETRIES} attempts."
-                    " Aborting."
+                    f"[red]Failed to push branch after {MAX_PUSH_RETRIES} attempts. Aborting.[/red]"
                 )
                 exit(1)
 
@@ -1741,9 +1748,9 @@ def main(
             if not output_file:  # Only restore if not saving to output file
                 restore_backup(file_path, file_path + ".bak")
 
-        # --- Cleanup ---
-        if not debug:
-            shutil.rmtree(temp_dir)  # Clean up the temporary directory
+    # --- Cleanup ---
+    if not debug:
+        shutil.rmtree(temp_dir)  # Clean up the temporary directory
 
 
 if __name__ == "__main__":
