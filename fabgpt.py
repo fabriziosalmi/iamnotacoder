@@ -384,12 +384,14 @@ def get_llm_improvements_summary(
                 max_tokens=512,  # Limit response length
             )
             summary = response.choices[0].message.content.strip()
-            # Split into bullet points, handling different bullet styles
+
+            # IMPROVED SPLITTING LOGIC:
             improvements = [
-                line.strip("-*+ ").strip()
-                for line in re.split(r"[\-\*\+] ", summary)
-                if line.strip()
+                line.strip() for line in summary.splitlines() if line.strip()
             ]
+            # Remove any leading bullet points or numbers
+            improvements = [re.sub(r"^[\-\*\+] |\d+\.\s*", "", line) for line in improvements]
+
             improvements_summary[category] = improvements
 
         except Exception as e:
@@ -1536,7 +1538,7 @@ def main(
             summary += " (LLM improvements failed)"
         commit_message_parts.append(summary)
 
-        #  --- Changes Made ---
+        # --- Changes Made ---
         body_lines = []
         changes_made = []
 
@@ -1551,54 +1553,42 @@ def main(
             )
         if tests_generated:
             changes_made.append("Generated/updated tests")
-        # Add a blank line before the body
-        if changes_made or analysis_diff or test_results:
-            body_lines.append("") #  add empty line before the body
+
+        # Add a blank line before the body *only if there's content*
+        if changes_made or analysis_diff or test_results or llm_improvements_summary:
+            body_lines.append("")
 
         if changes_made:
-            body_lines.append("✨ **Changes Made:**")  # More descriptive
+            body_lines.append("✨ **Changes Made:**")
             for change in changes_made:
-                body_lines.append(f"- {change}")  # Use a list format
-        # No need for an "else" here; just don't add the section if empty
+                body_lines.append(f"- {change}")
+            body_lines.append("")  # Add empty line AFTER Changes Made
 
-        # --- Static Analysis Differences ---
         if analysis_diff:
-            body_lines.append("\n⚠️ **Static Analysis Improvements:**")
+            body_lines.append("⚠️ **Static Analysis Improvements:**")
             for tool, diff in analysis_diff.items():
                 if diff < 0:
-                    body_lines.append(
-                        f"- {tool}: Reduced {abs(diff)} errors/warnings"
-                    )
+                    body_lines.append(f"- {tool}: Reduced {abs(diff)} errors/warnings")
                 elif diff > 0:
-                    body_lines.append(
-                        f"- {tool}: Increased {diff} errors/warnings (check required)"
-                    )
-                # Don't report if no change (diff == 0)
+                    body_lines.append(f"- {tool}: Increased {diff} errors/warnings (check required)")
+            body_lines.append("")  # Add empty line AFTER Static Analysis
 
-        # --- Test Results ---
         if test_results:
-            test_outcome = (
-                "✅ Passed" if test_results["returncode"] == 0 else "❌ Failed"
-            )
-            body_lines.append(f"\n🧪 **Test Results:** {test_outcome}")
-
+            test_outcome = "✅ Passed" if test_results["returncode"] == 0 else "❌ Failed"
+            body_lines.append(f"🧪 **Test Results:** {test_outcome}")
             if "TOTAL" in test_results.get("output", ""):
-                for line in test_results.get("output").splitlines():
+                for line in test_results["output"].splitlines():
                     if line.lstrip().startswith("TOTAL"):
                         try:
-                            coverage_percentage = float(
-                                line.split()[-1].rstrip("%")
-                            )
-                            body_lines.append(
-                                f"  - Code Coverage: {coverage_percentage:.2f}%"
-                            )
+                            coverage_percentage = float(line.split()[-1].rstrip("%"))
+                            body_lines.append(f"  - Code Coverage: {coverage_percentage:.2f}%")
                         except (ValueError, IndexError):
                             pass
+            body_lines.append("") # Add empty line AFTER Test Results
 
-        # --- LLM improvement summary ---
+
         if llm_improvements_summary:
-             body_lines.append("") # Empty line for separation
-             category_icons = {  # copied to avoid duplication, centralize!
+            category_icons = {
                 "style": "🎨",
                 "maintenance": "🛠️",
                 "security": "🔒",
@@ -1608,24 +1598,22 @@ def main(
                 "refactor": "♻️",
                 "bugfix": "🐛",
                 "feature": "✨",
-             }
-
-             for category, improvements in llm_improvements_summary.items():
+            }
+            for category, improvements in llm_improvements_summary.items():
                 if improvements and improvements != ["Error retrieving improvements."]:
                     icon = category_icons.get(category.lower(), "✨")
                     body_lines.append(f"{icon} **{category.capitalize()} Improvements:**")
                     for improvement in improvements:
                         body_lines.append(f"- {improvement}")
+            body_lines.append("")  # Add empty line AFTER LLM Improvements
 
-        # Combine the commit message parts:
+
         if body_lines:
-              commit_message_parts.extend(body_lines)
+            commit_message_parts.extend(body_lines)
 
         final_commit_message = "\n".join(commit_message_parts)
-
-        if commit_message:  # Override with custom message if given
+        if commit_message:
             final_commit_message = commit_message
-
 
         create_commit(
             repo_obj,
@@ -1633,7 +1621,7 @@ def main(
             final_commit_message,
             test_results,
             llm_improvements_summary,
-        )  # Create commit, Pass LLM summary
+        )
 
         # --- Push and Pull Request (if not dry run and not local commit) ---
 
