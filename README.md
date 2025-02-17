@@ -6,9 +6,6 @@
 
 FabGPT is a command-line tool designed to automatically improve the quality of Python code within GitHub repositories. It leverages static analysis tools, Large Language Models (LLMs), and automated testing to enhance code style, maintainability, security, and performance.  FabGPT can operate on individual files or process multiple files from a JSON list, making it suitable for both targeted improvements and broader code quality initiatives.  It integrates seamlessly with GitHub, offering both local commit and pull request creation capabilities, and it fully supports forking for a non-destructive workflow.
 
-> [!NOTE] 
-> :baby: First run and [merged PR](https://github.com/mitchellggreenhalgh/mid-distance-db/pull/3#issuecomment-2663849733).
-
 ## Features
 
 *   **Automated Code Improvement:**  Uses LLMs to suggest and apply improvements in various categories (style, maintainability, security, performance).  Provides a robust retry mechanism and handles diverse LLM response formats.
@@ -42,6 +39,55 @@ FabGPT is a command-line tool designed to automatically improve the quality of P
 *   **Line Length Control:**  Enforces a configurable maximum line length, defaulting to the PEP 8 standard of 79 characters.
 * **Output File Options:** Allows user to save the modified file to another path respect the original.
 * **Output Info File:** Create a complete report in txt format.
+
+*Example*
+
+```bash
+python3 fabgpt.py --repo https://github.com/fabriziosalmi/testrepo --files script3.py --branch main -t $GITHUB_API_TOKEN --config config.toml --fork-repo
+
+Forking repository to user: fabriziosalmi
+Forked repository to: https://github.com/fabriziosalmi/testrepo.git
+Cloning repository (shallow): https://github.com/fabriziosalmi/testrepo.git
+Repository cloned to: /var/folders/h8/6y19287n1sx6t9r4nmxwmpgw0000gn/T/tmpwlm6e6su in 0.55 seconds
+Creating branch: improvement-script3_py-code_improvements-20250217-211714-1dff0aa5
+Created branch: improvement-script3_py-code_improvements-20250217-211714-1dff0aa5 in 0.02 seconds
+Checking out branch: main
+Checked out branch: main in 0.35 seconds
+Checking out branch: improvement-script3_py-code_improvements-20250217-211714-1dff0aa5
+Checked out branch: improvement-script3_py-code_improvements-20250217-211714-1dff0aa5 in 0.34 seconds
+Running static analysis...
+⣽ Running analysis... •   0% • 0/4 0:00:00 Running black[02/17/25 21:17:15] ERROR    CalledProcessError for command `black --check --diff --line-length=79         ...                                                                                             
+Command `isort --check-only --diff /var/folders/h8/6y19287n1sx6t9r4nmxwmpgw0000gn/T/tmpwlm6e6su/script3.py` executed in 0.06 seconds.
+⣻ Running analysis... •  50% • 2/4 0:00:00 Running pylint[02/17/25 21:17:16] ERROR    CalledProcessError for command `pylint                                      ...                                                                                              
+Test generation phase...
+[02/17/25 21:17:31] INFO     HTTP Request: POST http://localhost:1234/v1/chat/completions "HTTP/1.1 200 OK"                _client.py:1025
+LLM test generation request took 14.89 seconds.
+Test file already exists: /var/folders/h8/6y19287n1sx6t9r4nmxwmpgw0000gn/T/tmpwlm6e6su/../tests/test_script3.py. Skipping write.
+File improvement phase...
+Backup created: /var/folders/h8/6y19287n1sx6t9r4nmxwmpgw0000gn/T/tmpwlm6e6su/script3.py.bak.20250217_211731
+Command `black --line-length=79 /var/folders/h8/6y19287n1sx6t9r4nmxwmpgw0000gn/T/tmpwlm6e6su/script3.py` executed in 0.09 seconds.
+Command `isort /var/folders/h8/6y19287n1sx6t9r4nmxwmpgw0000gn/T/tmpwlm6e6su/script3.py` executed in 0.06 seconds.
+⠼ Improving category: style   0% • 0/4 0:00:20 Starting...[02/17/25 21:17:51] INFO     HTTP Request: POST http://localhost:1234/v1/chat/completions "HTTP/1.1 200 OK"                _client.py:1025
+⠦ Improving category: maintenance  25% • 1/4 0:00:48 Starting...[02/17/25 21:18:20] INFO     HTTP Request: POST http://localhost:1234/v1/chat/completions "HTTP/1.1 200 OK"                _client.py:1025
+⠼ Improving category: security  50% • 2/4 0:01:45 Starting...[02/17/25 21:19:16] INFO     HTTP Request: POST http://localhost:1234/v1/chat/completions "HTTP/1.1 200 OK"                _client.py:1025
+⠙ Improving category: performance  75% • 3/4 0:02:20 Starting...[02/17/25 21:19:51] INFO     HTTP Request: POST http://localhost:1234/v1/chat/completions "HTTP/1.1 200 OK"                _client.py:1025
+Running static analysis...
+⣽ Running analysis... •   0% • 0/4 0:00:00 Running black                    ERROR    CalledProcessError for command `black --check --diff --line-length=79        ...                                                                                           
+[02/17/25 21:19:59] INFO     HTTP Request: POST http://localhost:1234/v1/chat/completions "HTTP/1.1 200 OK"                _client.py:1025
+[02/17/25 21:20:14] INFO     HTTP Request: POST http://localhost:1234/v1/chat/completions "HTTP/1.1 200 OK"                _client.py:1025
+[02/17/25 21:20:24] INFO     HTTP Request: POST http://localhost:1234/v1/chat/completions "HTTP/1.1 200 OK"                _client.py:1025
+[02/17/25 21:20:31] INFO     HTTP Request: POST http://localhost:1234/v1/chat/completions "HTTP/1.1 200 OK"                _client.py:1025
+Creating commit...
+Commit created successfully.
+Pushing branch to remote (attempt 1/3)...
+Branch pushed successfully after 1 attempt(s).
+Creating Pull Request...
+Pull Request created: https://github.com/fabriziosalmi/testrepo/pull/46
+All operations completed successfully.
+```
+
+> [!NOTE] 
+> :baby: First run and [merged PR](https://github.com/mitchellggreenhalgh/mid-distance-db/pull/3#issuecomment-2663849733).
 
 ## Installation
 
