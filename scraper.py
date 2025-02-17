@@ -3,10 +3,11 @@ import requests
 import base64
 import time
 import json
-import os  # Import the 'os' module
+import os
+import threading
 from datetime import datetime, timedelta
 from rich.console import Console
-from rich.progress import track, Progress
+from rich.progress import Progress
 from rich.table import Table
 import concurrent.futures
 
@@ -15,8 +16,8 @@ console = Console()
 
 # GitHub API base URL
 GITHUB_API_URL = "https://api.github.com"
-MAX_RETRIES = 3  # Maximum number of retries for API requests
-RETRY_DELAY = 5  # Seconds to wait between retries
+MAX_RETRIES = 3
+RETRY_DELAY = 5  # Initial delay, will be adjusted
 
 
 class GitHubAPIError(Exception):
@@ -25,7 +26,7 @@ class GitHubAPIError(Exception):
 
 
 def make_github_request(url, headers, params=None, method="GET", data=None):
-    """Makes a request to the GitHub API with retries and error handling."""
+    """Makes a request to the GitHub API with retries and rate limit handling."""
     for attempt in range(MAX_RETRIES):
         try:
             if method == "GET":
@@ -35,31 +36,47 @@ def make_github_request(url, headers, params=None, method="GET", data=None):
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
 
-            response.raise_for_status()  # Raises HTTPError for bad requests (4xx or 5xx)
+            response.raise_for_status()
+
+            if response.status_code in (403, 429):
+                remaining = response.headers.get('X-RateLimit-Remaining')
+                reset_timestamp = response.headers.get('X-RateLimit-Reset')
+
+                if remaining == '0' and reset_timestamp:
+                    reset_time = datetime.fromtimestamp(int(reset_timestamp))
+                    wait_time = (reset_time - datetime.now()).total_seconds() + 1
+                    wait_time = max(0, wait_time)
+                    console.print(f"[yellow]Rate limit exceeded. Waiting until {reset_time.strftime('%Y-%m-%d %H:%M:%S')} ({wait_time:.0f} seconds)[/yellow]")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    wait_time = 60 * (attempt + 1)  # Exponential backoff
+                    console.print(f"[yellow]Rate limit or other error (status {response.status_code}). Waiting {wait_time} seconds.[/yellow]")
+                    time.sleep(wait_time)
+                    continue
+
             return response.json()
+
         except requests.exceptions.RequestException as e:
             if attempt == MAX_RETRIES - 1:
-                raise GitHubAPIError(
-                    f"Failed to make request to {url} after {MAX_RETRIES} attempts: {e}"
-                ) from e
-            console.print(
-                f"[yellow]Request failed: {e}. Retrying in {RETRY_DELAY} seconds... (Attempt {attempt + 1}/{MAX_RETRIES})[/yellow]"
-            )
-            time.sleep(RETRY_DELAY)
-    return None  # should never reach here, but for type hinting
+                raise GitHubAPIError(f"Failed to make request to {url} after {MAX_RETRIES} attempts: {e}") from e
+            # Use exponential backoff for other request exceptions as well
+            wait_time = RETRY_DELAY * (2 ** attempt)  # 5, 10, 20 seconds
+            console.print(f"[yellow]Request failed: {e}. Retrying in {wait_time} seconds... (Attempt {attempt + 1}/{MAX_RETRIES})[/yellow]")
+            time.sleep(wait_time)
+
+    return None  # Should never reach here
 
 
 def search_repositories(token, max_repos):
-    """Search for Python repositories with latest commit older than one year
-    and 'main' as the default branch.
-    """
+    """Search for Python repositories."""
     headers = {"Authorization": f"token {token}"}
     query_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
     query = f"language:python pushed:<{query_date}"
 
     repos = []
     page = 1
-    per_page = 30  # Maximum items per page allowed by GitHub API
+    per_page = 30
 
     with Progress(console=console) as progress:
         task = progress.add_task("[cyan]Searching repositories...", total=max_repos)
@@ -83,28 +100,26 @@ def search_repositories(token, max_repos):
                 if "items" not in data or not data["items"]:
                     break
 
-                # Filter for repos with 'main' as the default branch
                 for item in data["items"]:
                     if item.get("default_branch") == "main":
                         repos.append(item)
-                        progress.update(task, advance=1)  # Increment for each *added* repo
+                        progress.update(task, advance=1)
                     if len(repos) >= max_repos:
-                        break  # Stop once we have enough
+                        break
 
                 page += 1
-                time.sleep(0.5)  # Add small delay
+                time.sleep(0.5)  # Basic delay to avoid immediate rate limiting
 
             except GitHubAPIError as e:
                 console.print(f"[red]Error during repository search: {e}[/red]")
-                break  # Stop searching
-        progress.update(task, completed=len(repos)) #ensure the progress reach the total.
+                break
+        progress.update(task, completed=len(repos))
 
     return repos
 
 
-
 def find_python_files(token, repo_full_name, quality_threshold):
-    """Find Python files in the repository and evaluate their quality."""
+    """Find Python files in the repository."""
     headers = {"Authorization": f"token {token}"}
     results = []
 
@@ -113,26 +128,22 @@ def find_python_files(token, repo_full_name, quality_threshold):
             f"{GITHUB_API_URL}/repos/{repo_full_name}/contents", headers=headers
         )
         if not isinstance(files, list):
-            # Sometimes github returns a single file, not a list
             return []
 
         for file in files:
             if file["type"] == "file" and file["name"].endswith(".py"):
-                # Perform quality check on the file
                 quality_score = evaluate_file_quality(token, repo_full_name, file["path"])
                 if quality_score <= quality_threshold:
                     results.append((file["path"], quality_score))
 
     except GitHubAPIError as e:
-        console.print(
-            f"[red]Error during file search in {repo_full_name}: {e}[/red]"
-        )  # Specific repo error
+        console.print(f"[red]Error during file search in {repo_full_name}: {e}[/red]")
 
     return results
 
 
 def evaluate_file_quality(token, repo_full_name, file_path):
-    """Evaluate the quality of a Python file based on simple metrics."""
+    """Evaluate the quality of a Python file."""
     headers = {"Authorization": f"token {token}"}
     try:
         file_data = make_github_request(
@@ -141,37 +152,25 @@ def evaluate_file_quality(token, repo_full_name, file_path):
         )
 
         if "content" in file_data:
-            decoded_content = base64.b64decode(file_data["content"]).decode(
-                "utf-8", errors="replace"
-            )  # handle decode errors
-            # Example quality metric: Line count
+            decoded_content = base64.b64decode(file_data["content"]).decode("utf-8", errors="replace")
             lines = decoded_content.splitlines()
-            quality_score = len(lines)  # Simple metric: total lines in the file
+            quality_score = len(lines)
             return quality_score
 
     except GitHubAPIError as e:
-        console.print(
-            f"[red]Error during file quality evaluation for {repo_full_name}/{file_path}: {e}[/red]"
-        )
+        console.print(f"[red]Error during file quality evaluation for {repo_full_name}/{file_path}: {e}[/red]")
 
-    return float("inf")  # Default to poor quality if file cannot be evaluated
+    return float("inf")
 
 
 def create_unique_filename(base_name, max_repos, quality_threshold, extension):
-    """Create a unique filename using the current timestamp."""
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")  # More precise timestamp
+    """Create a unique filename."""
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return f"{timestamp}-{max_repos}repos-MaxQuality{quality_threshold}.{extension}"
 
 
 def load_existing_data(directory):
-    """Loads existing data from all JSON files in the directory.
-
-    Args:
-        directory: The directory to search for JSON files.
-
-    Returns:
-        A set of (repo_url, file_path) tuples representing the already processed files.
-    """
+    """Loads existing data from JSON files."""
     existing_data = set()
     for filename in os.listdir(directory):
         if filename.endswith(".json"):
@@ -179,68 +178,48 @@ def load_existing_data(directory):
             try:
                 with open(filepath, "r") as f:
                     data = json.load(f)
-                    # Ensure data is a list (handle potential bad files)
                     if isinstance(data, list):
                         for item in data:
-                            # Check for key existence to prevent errors with incomplete data
                             if "repo_url" in item and "python_file" in item:
                                 existing_data.add((item["repo_url"], item["python_file"]))
             except (json.JSONDecodeError, FileNotFoundError) as e:
                 console.print(f"[yellow]Warning: Could not read {filename}: {e}[/yellow]")
-            except Exception as e: #cat any error
-                console.print(f"[red]Error: Could not read {filename}: {e}[/red]")
-
+            except Exception as e:
+                console.print(f"[red]Error could not read{filename}: {e}[/red] ")
     return existing_data
 
 
-def process_repository(token, repo, quality_threshold, existing_data):
-    """Process a single repository, skipping already processed files.
-
-    Args:
-        token: GitHub API token.
-        repo: Repository data.
-        quality_threshold: The quality threshold.
-        existing_data: A set of (repo_url, file_path) tuples to skip.
-
-    Returns:
-        A list of result dictionaries.
-    """
+def process_repository(token, repo, quality_threshold, initial_existing_data, processed_files, processed_files_lock, progress, task_id):
+    """Process a single repository, thread-safe."""
     repo_name = repo["full_name"]
-    repo_url = repo["html_url"]  # Get the repo URL here
-    console.print(f"[green]Processing repository:[/green] {repo_name}")
+    repo_url = repo["html_url"]
     results = []
+    skipped_count = 0
     python_files = find_python_files(token, repo_name, quality_threshold)
 
     for file_path, quality_score in python_files:
-        # Check if the (repo_url, file_path) tuple is already in existing_data
-        if (repo_url, file_path) not in existing_data:
-            results.append(
-                {
-                    "repo_url": repo_url,
-                    "python_file": file_path,
-                    "quality_score": quality_score,
-                }
-            )
+        if (repo_url, file_path) not in initial_existing_data:
+            with processed_files_lock:
+                if (repo_url, file_path) not in processed_files:
+                    results.append({
+                        "repo_url": repo_url,
+                        "python_file": file_path,
+                        "quality_score": quality_score,
+                    })
+                    processed_files.add((repo_url, file_path))
         else:
-            console.print(f"[yellow]Skipping already processed file:[/yellow] {repo_url}/{file_path}")
-    return results
+            skipped_count += 1
+
+    progress.update(task_id, advance=1)
+    return results, skipped_count
 
 
 def main():
     parser = argparse.ArgumentParser(description="GitHub Python Repo Scraper")
     parser.add_argument("--token", required=True, help="GitHub Personal Access Token")
-    parser.add_argument(
-        "--max-repos", type=int, default=10, help="Number of repositories to retrieve"
-    )
-    parser.add_argument(
-        "--output", default="output", help="Base name for the output JSON file"
-    )
-    parser.add_argument(
-        "--quality-threshold",
-        type=int,
-        default=50,
-        help="Maximum allowed quality score for a file to be included",
-    )
+    parser.add_argument("--max-repos", type=int, default=10, help="Number of repositories")
+    parser.add_argument("--output", default="output", help="Base name for output")
+    parser.add_argument("--quality-threshold", type=int, default=50, help="Max quality score")
     args = parser.parse_args()
 
     token = args.token
@@ -248,38 +227,41 @@ def main():
     output_base_name = args.output
     quality_threshold = args.quality_threshold
 
-    output_file = create_unique_filename(
-        output_base_name, max_repos, quality_threshold, "json"
-    )
-
-    # Get the directory of the script
+    output_file = create_unique_filename(output_base_name, max_repos, quality_threshold, "json")
     script_directory = os.path.dirname(os.path.abspath(__file__))
+
+    processed_files_lock = threading.Lock()
+    processed_files = set()
     existing_data = load_existing_data(script_directory)
 
-    console.print(f"[cyan]Searching for up to {max_repos} Python repositories...[/cyan]")
     repos = search_repositories(token, max_repos)
-
-
     all_results = []
+    total_skipped = 0
 
-    with concurrent.futures.ThreadPoolExecutor(
-        max_workers=5
-    ) as executor:  # Use a ThreadPool for I/O-bound tasks
-        futures = [
-            executor.submit(process_repository, token, repo, quality_threshold, existing_data)
-            for repo in repos
-        ]
-        for future in track(
-            concurrent.futures.as_completed(futures),
-            total=len(repos),
-            description="Processing repositories...",
-        ):
-            try:
-                results = future.result()  # Get results from the completed future
-                all_results.extend(results)
-            except Exception as e:
-                console.print(f"[red]Error processing a repository: {e}[/red]")
+    with Progress(console=console) as progress:
+        task_id = progress.add_task("[green]Processing repositories...", total=len(repos))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = []
+            for repo in repos:
+                initial_existing_data_copy = existing_data.copy()
+                futures.append(
+                    executor.submit(
+                        process_repository, token, repo, quality_threshold,
+                        initial_existing_data_copy, processed_files,
+                        processed_files_lock, progress, task_id
+                    )
+                )
 
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    results, skipped_count = future.result()
+                    all_results.extend(results)
+                    total_skipped += skipped_count
+                except Exception as e:
+                    console.print(f"[red]Error processing a repository: {e}[/red]")
+
+    console.print(f"[cyan]{len(all_results)} Items added to JSON[/cyan]")
+    console.print(f"[yellow]{total_skipped} Items skipped (already present)[/yellow]")
 
     with open(output_file, "w") as f:
         json.dump(all_results, f, indent=4)
