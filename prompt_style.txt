@@ -1,5 +1,4 @@
-Below is a Python file.  Ensure it adheres to PEP 8 style guidelines, add type hints where possible, and add any missing docstrings using Google style format. Do NOT change the functionality. Return ONLY the complete, modified Python code.
-
+Apply PEP 8 style guidelines to the following Python code.  Return ONLY the modified Python code, and nothing else before or after. Do not include any explanations or introductory text.
 ```python
 {code}
 ```
