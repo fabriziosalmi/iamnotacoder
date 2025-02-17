@@ -8,7 +8,7 @@ from openai import OpenAI, Timeout
 import datetime
 import shutil
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn, BarColumn
 from rich.table import Table
 import json
 from github import Github
@@ -256,12 +256,9 @@ def analyze_project(
     with Progress(
         SpinnerColumn("dots2"),
         TextColumn("[bold cyan]{task.description}"),
-        "•",
-        TextColumn("[bold]{task.percentage:>3.0f}%"),
-        "•",
-        TextColumn("[blue]{task.completed}/{task.total}"),
+        BarColumn(),
+        TextColumn("[bold blue]{task.fields[tool]}"),
         TimeElapsedColumn(),
-        TextColumn("[green]{task.fields[tool]}"),
         console=console,
         transient=True,
     ) as progress:
@@ -513,11 +510,9 @@ def improve_file(
             current_code = f.read()
 
         with Progress(
-            SpinnerColumn(),
+            SpinnerColumn("earth"),
             TextColumn("[bold blue]{task.description}"),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            "•",
-            TextColumn("[progress.completed]{task.completed}/{task.total}"),
+            BarColumn(),
             TimeElapsedColumn(),
             TextColumn("[bold green]{task.fields[status]}"),
             console=console,
