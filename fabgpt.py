@@ -871,9 +871,9 @@ def create_info_file(
         f.write("Changes Made:\n")
         changes_made = []
         if shutil.which("black"):
-            changes_made.append("Formatted with Black")
+            changes_made.append("Formatted with [Black](https://github.com/psf/black)")
         if shutil.which("isort"):
-            changes_made.append("Formatted with isort")
+            changes_made.append("Formatted with [isort](https://pycqa.github.io/isort/)")
         if llm_success:
             changes_made.append(f"Applied LLM improvements ({optimization_level})")
         if test_results:  # Check if test_results exist
@@ -946,6 +946,14 @@ def create_commit(
             tests_dir = os.path.join(repo.working_tree_dir, "tests")
             if os.path.exists(tests_dir):
                 repo.git.add(tests_dir)
+
+        # Prepend custom commit message from commit_custom.txt if it exists.
+        commit_custom_file = os.path.join(repo.working_tree_dir, "commit_custom.txt")
+        if os.path.exists(commit_custom_file):
+            with open(commit_custom_file, "r", encoding="utf-8") as cc:
+                custom_content = cc.read().strip()
+            if custom_content:
+                commit_message = custom_content + "\n\n" + commit_message
 
         # Construct the commit message body
         body = ""
@@ -1416,8 +1424,7 @@ def main(
             changes_made.append("Formatted with isort")
         if llm_success:
             changes_made.append(
-                f"Applied LLM improvements (model: {llm_model}, level:"
-                f" {llm_optimization_level})"
+                f"Applied LLM improvements (model: {llm_model}, temperature: {llm_temperature}, optimization: {llm_optimization_level})"
             )
         if tests_generated:
             changes_made.append("Generated/updated tests")
