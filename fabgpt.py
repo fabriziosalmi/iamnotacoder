@@ -1390,9 +1390,9 @@ def main(
         body_lines = []
         changes_made = []
 
-        changes_made.append("Hi there! 👋 fab minor improvements applied in PR, You can reach me [here](https://github.com/fabriziosalmi) any time ^_^")
-        changes_made.append("Here's the improvements list made to the python script:")
-        changes_made.append("")
+        body_lines.append("Hi there! 👋 fab minor improvements applied in PR, You can reach me [here](https://github.com/fabriziosalmi) any time ^_^")
+        body_lines.append("Here's the improvements list made to the python script:")
+        body_lines.append("")
 
         if shutil.which("black"):
             changes_made.append("Formatted with Black")
