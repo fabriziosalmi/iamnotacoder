@@ -1001,6 +1001,8 @@ def create_commit(
             with open(commit_custom_file, "r", encoding="utf-8") as cc:
                 custom_content = cc.read().strip()
             if custom_content:
+                # Prepend custom commit message
+                # commit_message = f"{custom_content}\n\n{commit_message\n\nCheck [this](https://github.com/fabriziosalmi/FabGPT) out!}"
                 commit_message = f"{custom_content}\n\n{commit_message}"
 
         repo.index.commit(commit_message)
