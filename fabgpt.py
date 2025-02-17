@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn
 from rich.table import Table
 import json
-from github import GitHub  # Import only Github
+from github import Github
 import hashlib
 import time
 import ast
@@ -944,6 +944,11 @@ def run_tests(
             "returncode": returncode,  # Store the return code
         }
 
+        if test_results:
+            console.print(f"[debug]Test return code: {test_results['returncode']}")
+            console.print(f"[debug]Test output: {test_results['output']}")
+            console.print(f"[debug]Test errors: {test_results['errors']}")
+
         # Provide feedback based on the test results
         if returncode == 0:
             console.print("[green]All tests passed.[/green]")
@@ -1085,6 +1090,9 @@ def create_commit(
                 "refactor": "♻️",
                 "bugfix": "🐛",
                 "feature": "✨",
+                "static_analysis": "⚠️",  # Add this for static analysis section
+                "changes": "✨",          # Add this for changes section
+                "test_results": "🧪"     # Add this for test results section
             }
             
             for category, improvements in llm_improvements_summary.items():
@@ -1124,8 +1132,9 @@ def create_pull_request(
     """Creates a GitHub Pull Request."""
     try:
         console.print(f"[blue]Creating Pull Request...[/blue]")
-        # Authenticate using the token directly
-        g = GitHub(token)
+        # Correct GitHub initialization
+        g = Github(token)  # Initialize with token directly
+        
         repo_name = repo_url.replace(
             "https://github.com/", ""
         )  # Extract repo name
@@ -1618,15 +1627,13 @@ def main(
             for tool, diff in analysis_diff.items():
                 if diff < 0:
                     body_lines.append(
-                        f"  - **{tool}:** Reduced {abs(diff)} errors/warnings"
+                        f"  - {tool}: Reduced {abs(diff)} errors/warnings"
                     )
                 elif diff > 0:
                     body_lines.append(
-                        "  - **{tool}:** Increased {diff} errors/warnings (check"
-                        " required)"
+                        f"  - {tool}: Increased {diff} errors/warnings (check required)"
                     )
-                # else:  # Don't report if no change (diff == 0)
-                #    body_lines.append(f"  - **{tool}:** No change in errors/warnings")
+                # Don't report if no change (diff == 0)
 
         # Add test results to commit body
         if test_results:
@@ -1647,6 +1654,7 @@ def main(
                             )
                         except (ValueError, IndexError):
                             pass
+
         final_commit_message = summary  # Start with the summary
         if body_lines:
             final_commit_message += "\n\n" + "\n".join(body_lines)  # Add the body

@@ -351,6 +351,7 @@ class TestFabGPT(unittest.TestCase):
     def test_get_llm_improvements_summary(self, mock_openai):
         """Test summarizing LLM improvements."""
         mock_client = MagicMock(spec=OpenAI)  # Mock OpenAI client
+        mock_client.chat = MagicMock()  # Add chat mock
         mock_openai.return_value = mock_client # Return mock_client instance
 
         mock_response = MagicMock()  # Mock the chat completion response
@@ -374,6 +375,7 @@ class TestFabGPT(unittest.TestCase):
     def test_get_llm_improvements_summary_fail(self, mock_openai):
         """Test error case."""
         mock_client = MagicMock(spec=OpenAI)  # Mock OpenAI client
+        mock_client.chat = MagicMock()  # Add chat mock
         mock_openai.return_value = mock_client # Return mock_client instance
         mock_client.chat.completions.create.side_effect = Exception("API Error")
         original_code = "def foo():\n pass"
@@ -392,6 +394,7 @@ class TestFabGPT(unittest.TestCase):
     def test_generate_tests_timeout(self, mock_file, mock_openai):
         """Test test generation timeout."""
         mock_client = MagicMock(spec=OpenAI)
+        mock_client.chat = MagicMock()  # Add chat mock
         mock_openai.return_value = mock_client
         # Correct mocking:
         mock_client.chat.completions.create.side_effect = Timeout("Timeout")
@@ -418,6 +421,7 @@ class TestFabGPT(unittest.TestCase):
         """Test recovery from syntax errors."""
 
         mock_client = MagicMock(spec=OpenAI)
+        mock_client.chat = MagicMock()  # Add chat mock
         mock_openai.return_value = mock_client
 
         # First response: Syntax error
@@ -460,6 +464,7 @@ class TestFabGPT(unittest.TestCase):
         """Test reaching maximum syntax correction retries."""
 
         mock_client = MagicMock(spec=OpenAI)
+        mock_client.chat = MagicMock()  # Add chat mock
         mock_openai.return_value = mock_client
 
         # Mock multiple responses, all with syntax errors
@@ -495,6 +500,7 @@ class TestFabGPT(unittest.TestCase):
     ):
         """Test LLM timeout."""
         mock_client = MagicMock(spec=OpenAI)
+        mock_client.chat = MagicMock()  # Add chat mock
         mock_openai.return_value = mock_client
 
         mock_client.chat.completions.create.side_effect = Timeout("Request timed out")  # Simulate timeout
@@ -527,6 +533,7 @@ class TestFabGPT(unittest.TestCase):
         """Test generic LLM exception."""
 
         mock_client = MagicMock(spec=OpenAI)
+        mock_client.chat = MagicMock()  # Add chat mock
         mock_openai.return_value = mock_client
         mock_client.chat.completions.create.side_effect = Exception(
             "Some API error"
@@ -571,6 +578,7 @@ class TestFabGPT(unittest.TestCase):
     def test_generate_tests_success(self, mock_file, mock_fix, mock_openai):
         """Test successful test generation."""
         mock_client = MagicMock(spec=OpenAI)
+        mock_client.chat = MagicMock()  # Add chat mock
         mock_openai.return_value = mock_client
 
         mock_response = MagicMock()
@@ -603,6 +611,7 @@ class TestFabGPT(unittest.TestCase):
     def test_generate_tests_syntax_error_recovery(self, mock_file, mock_fix, mock_openai):
         """Test test generation with syntax error recovery."""
         mock_client = MagicMock(spec=OpenAI)
+        mock_client.chat = MagicMock()  # Add chat mock
         mock_openai.return_value = mock_client
 
         # First response: Syntax error
@@ -641,6 +650,7 @@ class TestFabGPT(unittest.TestCase):
     def test_generate_tests_timeout(self, mock_file, mock_openai):
         """Test test generation timeout."""
         mock_client = MagicMock(spec=OpenAI)
+        mock_client.chat = MagicMock()  # Add chat mock
         mock_openai.return_value = mock_client
         mock_client.chat.completions.create.side_effect = Timeout("Timeout")
 
@@ -662,6 +672,7 @@ class TestFabGPT(unittest.TestCase):
     def test_generate_tests_exception(self, mock_file, mock_openai):
         """Test generic exception during test generation."""
         mock_client = MagicMock(spec=OpenAI)
+        mock_client.chat = MagicMock()  # Add chat mock
         mock_openai.return_value = mock_client
         mock_client.chat.completions.create.side_effect = Exception("API Error")
 
