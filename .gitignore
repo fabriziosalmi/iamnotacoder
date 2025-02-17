@@ -4,3 +4,4 @@ commit_custom.txt
 report.txt
 __pycache__
 logs/
+*.json
