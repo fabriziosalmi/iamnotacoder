@@ -3,6 +3,7 @@ import requests
 import base64
 import time
 import json
+import os  # Import the 'os' module
 from datetime import datetime, timedelta
 from rich.console import Console
 from rich.progress import track, Progress
@@ -162,20 +163,66 @@ def create_unique_filename(base_name, max_repos, quality_threshold, extension):
     return f"{timestamp}-{max_repos}repos-MaxQuality{quality_threshold}.{extension}"
 
 
-def process_repository(token, repo, quality_threshold):
-    """Process a single repository and return results."""
+def load_existing_data(directory):
+    """Loads existing data from all JSON files in the directory.
+
+    Args:
+        directory: The directory to search for JSON files.
+
+    Returns:
+        A set of (repo_url, file_path) tuples representing the already processed files.
+    """
+    existing_data = set()
+    for filename in os.listdir(directory):
+        if filename.endswith(".json"):
+            filepath = os.path.join(directory, filename)
+            try:
+                with open(filepath, "r") as f:
+                    data = json.load(f)
+                    # Ensure data is a list (handle potential bad files)
+                    if isinstance(data, list):
+                        for item in data:
+                            # Check for key existence to prevent errors with incomplete data
+                            if "repo_url" in item and "python_file" in item:
+                                existing_data.add((item["repo_url"], item["python_file"]))
+            except (json.JSONDecodeError, FileNotFoundError) as e:
+                console.print(f"[yellow]Warning: Could not read {filename}: {e}[/yellow]")
+            except Exception as e: #cat any error
+                console.print(f"[red]Error: Could not read {filename}: {e}[/red]")
+
+    return existing_data
+
+
+def process_repository(token, repo, quality_threshold, existing_data):
+    """Process a single repository, skipping already processed files.
+
+    Args:
+        token: GitHub API token.
+        repo: Repository data.
+        quality_threshold: The quality threshold.
+        existing_data: A set of (repo_url, file_path) tuples to skip.
+
+    Returns:
+        A list of result dictionaries.
+    """
     repo_name = repo["full_name"]
+    repo_url = repo["html_url"]  # Get the repo URL here
     console.print(f"[green]Processing repository:[/green] {repo_name}")
     results = []
     python_files = find_python_files(token, repo_name, quality_threshold)
+
     for file_path, quality_score in python_files:
-        results.append(
-            {
-                "repo_url": repo["html_url"],
-                "python_file": file_path,
-                "quality_score": quality_score,
-            }
-        )
+        # Check if the (repo_url, file_path) tuple is already in existing_data
+        if (repo_url, file_path) not in existing_data:
+            results.append(
+                {
+                    "repo_url": repo_url,
+                    "python_file": file_path,
+                    "quality_score": quality_score,
+                }
+            )
+        else:
+            console.print(f"[yellow]Skipping already processed file:[/yellow] {repo_url}/{file_path}")
     return results
 
 
@@ -205,6 +252,10 @@ def main():
         output_base_name, max_repos, quality_threshold, "json"
     )
 
+    # Get the directory of the script
+    script_directory = os.path.dirname(os.path.abspath(__file__))
+    existing_data = load_existing_data(script_directory)
+
     console.print(f"[cyan]Searching for up to {max_repos} Python repositories...[/cyan]")
     repos = search_repositories(token, max_repos)
 
@@ -215,7 +266,7 @@ def main():
         max_workers=5
     ) as executor:  # Use a ThreadPool for I/O-bound tasks
         futures = [
-            executor.submit(process_repository, token, repo, quality_threshold)
+            executor.submit(process_repository, token, repo, quality_threshold, existing_data)
             for repo in repos
         ]
         for future in track(
