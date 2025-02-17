@@ -9,7 +9,7 @@ from rich.text import Text  # Import Text for styled text
 
 
 def run_fabgpt(repo_url, python_file, github_token, config_file, default_branch="main", console=None, fork_repo=False):
-    """Runs fabgpt.py with the given parameters, including forking support."""
+    """Runs iamnotacoder.py with the given parameters, including forking support."""
     if console is None:
         console = Console()
 
@@ -31,9 +31,9 @@ def run_fabgpt(repo_url, python_file, github_token, config_file, default_branch=
             #  to have it as separate argument if we're submitting to other's repo
             # command.extend(["--fork-user", <your_github_username>])  # Add if needed
 
-        if not os.path.exists("fabgpt.py"):
-            console.print("[red]Error: fabgpt.py not found in the current directory.[/red]")
-            return False, "", "fabgpt.py not found"
+        if not os.path.exists("iamnotacoder.py"):
+            console.print("[red]Error: iamnotacoder.py not found in the current directory.[/red]")
+            return False, "", "iamnotacoder.py not found"
 
         console.print(f"[blue]Running command for {python_file}:[/blue] {' '.join(command)}")  # More specific command log
         result = subprocess.run(command, capture_output=True, text=True, check=True)
@@ -49,8 +49,8 @@ def run_fabgpt(repo_url, python_file, github_token, config_file, default_branch=
         console.print(f"  [red]Stderr:[/red] {e.stderr}")
         return False, e.stdout, e.stderr
     except FileNotFoundError:
-        console.print(f"[red]Error: fabgpt.py not found.  Make sure it's in the current directory.[/red]")
-        return False, "", "fabgpt.py not found"
+        console.print(f"[red]Error: iamnotacoder.py not found.  Make sure it's in the current directory.[/red]")
+        return False, "", "iamnotacoder.py not found"
     except Exception as e:
         console.print(f"[red]An unexpected error occurred: {e}[/red]")
         return False, "", str(e)
@@ -58,7 +58,7 @@ def run_fabgpt(repo_url, python_file, github_token, config_file, default_branch=
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run fabgpt.py on multiple repositories.")
+    parser = argparse.ArgumentParser(description="Run iamnotacoder.py on multiple repositories.")
     parser.add_argument("-i", "--input", required=True, help="Path to the input JSON file.")
     parser.add_argument("-t", "--token", required=True, help="GitHub Personal Access Token.")
     parser.add_argument("-c", "--config", required=True, help="Path to the config.toml file.")
