@@ -16,7 +16,7 @@ def run_fabgpt(repo_url, python_file, github_token, config_file, default_branch=
     try:
         command = [
             "python3",
-            "fabgpt.py",
+            "iamnotacoder.py", 
             "--repo", repo_url,
             "--files", python_file,
             "--branch", default_branch,
