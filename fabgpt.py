@@ -21,6 +21,7 @@ import uuid
 import logging
 import difflib
 from rich.logging import RichHandler
+import sys  # Import sys
 
 console = Console()
 
@@ -28,7 +29,7 @@ console = Console()
 logging.basicConfig(
     level=logging.INFO,
     format="%(message)s",
-    handlers=[RichHandler(rich_tracebacks=True)]
+    handlers=[RichHandler(rich_tracebacks=True)],
 )
 
 # Constants
@@ -45,7 +46,7 @@ def run_command(
     command: List[str], cwd: Optional[str] = None
 ) -> Tuple[str, str, int]:
     """
-    Executes a shell command.  Handles errors robustly.
+    Executes a shell command. Handles errors robustly.
     """
     try:
         start_time = time.time()
@@ -79,7 +80,7 @@ def load_config(config_file: str) -> dict:
     except Exception as e:
         console.print(f"[red]Error loading configuration file:[/red] {e}")
         logging.exception("Failed to load config")
-        exit(1)  # Exit on config load failure
+        sys.exit(1)  # Exit on config load failure
 
 
 def create_backup(file_path: str) -> Optional[str]:
@@ -138,7 +139,7 @@ def clone_repository(repo_url: str, token: str) -> Tuple[git.Repo, str]:
     except git.exc.GitCommandError as e:
         console.print(f"[red]Error cloning repository:[/red] {e}")
         logging.exception("Error cloning repository")
-        exit(1)  # Exit on clone failure
+        sys.exit(1)  # Exit on clone failure
 
 
 def checkout_branch(repo: git.Repo, branch_name: str) -> None:
@@ -158,9 +159,7 @@ def checkout_branch(repo: git.Repo, branch_name: str) -> None:
             console.print(f"[yellow]Attempting to fetch branch {branch_name}[/yellow]")
             start_time = time.time()
             repo.git.fetch("origin", branch_name)
-            repo.git.checkout(
-                f"origin/{branch_name}"
-            )  # Checkout remote branch
+            repo.git.checkout(f"origin/{branch_name}")  # Checkout remote branch
             end_time = time.time()
             console.print(
                 f"[green]Checked out branch:[/green] {branch_name} in"
@@ -169,7 +168,7 @@ def checkout_branch(repo: git.Repo, branch_name: str) -> None:
         except git.exc.GitCommandError as e:
             console.print(f"[red]Error checking out branch:[/red] {e}")
             logging.exception("Error checking out branch")
-            exit(1)  # Exit on checkout failure
+            sys.exit(1)  # Exit on checkout failure
 
 
 def create_branch(repo: git.Repo, files: List[str], file_purpose: str = "") -> str:
@@ -196,7 +195,7 @@ def create_branch(repo: git.Repo, files: List[str], file_purpose: str = "") -> s
     except git.exc.GitCommandError as e:
         console.print(f"[red]Error creating branch:[/red] {e}")
         logging.exception("Error creating branch")
-        exit(1)  # Exit on branch creation failure
+        sys.exit(1)  # Exit on branch creation failure
 
 
 def get_file_purpose(file_path: str) -> str:
@@ -260,20 +259,26 @@ def analyze_project(
         TimeElapsedColumn(),
         TextColumn("[green]{task.fields[tool]}"),  # Show current tool
         console=console,
-        transient=True
+        transient=True,
     ) as progress:
-        analysis_task = progress.add_task("Running analysis...", total=len(tools), tool="")
+        analysis_task = progress.add_task(
+            "Running analysis...", total=len(tools), tool=""
+        )
         for tool in tools:
             progress.update(analysis_task, tool=f"Running {tool}")
             if tool in exclude_tools:
-                progress.update(analysis_task, advance=1, tool=f"Excluded {tool}")
+                progress.update(
+                    analysis_task, advance=1, tool=f"Excluded {tool}"
+                )
                 continue
 
             if shutil.which(tool) is None:
                 console.print(
                     f"[yellow]Tool not found: {tool}. Skipping.[/yellow]"
                 )
-                progress.update(analysis_task, advance=1, tool=f"Not found {tool}")
+                progress.update(
+                    analysis_task, advance=1, tool=f"Not found {tool}"
+                )
                 continue
 
             # Use a dictionary for commands - easier to manage
@@ -351,6 +356,7 @@ def clean_llm_response(response_text: str) -> str:
             cleaned_lines.append(line)
     return "\n".join(cleaned_lines).strip()
 
+
 def format_llm_summary(improvements_summary: Dict[str, List[str]]) -> str:
     """Formats the LLM improvement summary, deduplicating improvements."""
     formatted_summary = ""
@@ -370,6 +376,7 @@ def format_llm_summary(improvements_summary: Dict[str, List[str]]) -> str:
         formatted_summary = "No LLM-driven improvements were made.\n"
 
     return formatted_summary
+
 
 def get_llm_improvements_summary(
     original_code: str,
@@ -409,7 +416,9 @@ def get_llm_improvements_summary(
                     },
                     {"role": "user", "content": prompt},
                 ],
-                temperature=min(llm_temperature, 0.2),  # Lower temp for concise summaries
+                temperature=min(
+                    llm_temperature, 0.2
+                ),  # Lower temp for concise summaries
                 max_tokens=512,  # Limit response length
             )
             summary = response.choices[0].message.content.strip()
@@ -433,6 +442,7 @@ def get_llm_improvements_summary(
 
     return improvements_summary
 
+
 def improve_file(
     file_path: str,
     client: OpenAI,
@@ -448,7 +458,7 @@ def improve_file(
     backup_path = create_backup(file_path)
     if not backup_path:
         console.print("[red]Failed to create backup. Aborting.[/red]")
-        exit(1)
+        sys.exit(1)
 
     # Format with Black and isort before LLM processing
     if shutil.which("black"):
@@ -470,20 +480,30 @@ def improve_file(
         "•",
         TextColumn("[progress.completed]{task.completed}/{task.total}"),
         TimeElapsedColumn(),
-        TextColumn("[bold green]{task.fields[status]}"),  # Add status field with color
+        TextColumn(
+            "[bold green]{task.fields[status]}"
+        ),  # Add status field with color
         console=console,  # Explicitly pass console
         transient=True,
-        refresh_per_second=10  # Increase refresh rate
+        refresh_per_second=10,  # Increase refresh rate
     ) as progress:
-        improve_task = progress.add_task("Improving file...", total=len(categories), status="Starting...")
-        
+        improve_task = progress.add_task(
+            "Improving file...", total=len(categories), status="Starting..."
+        )
+
         for category in categories:
-            progress.update(improve_task, description=f"[blue]Improving category: {category}[/blue]", status="In progress...")
-            
+            progress.update(
+                improve_task,
+                description=f"[blue]Improving category: {category}[/blue]",
+                status="In progress...",
+            )
+
             # Load category-specific prompt
             prompt_file = os.path.join(custom_prompt_dir, f"prompt_{category}.txt")
             if not os.path.exists(prompt_file):
-                console.print(f"[red]Prompt file not found: {prompt_file}. Skipping category.[/red]")
+                console.print(
+                    f"[red]Prompt file not found: {prompt_file}. Skipping category.[/red]"
+                )
                 progress.update(improve_task, advance=1, status="Prompt not found")
                 continue
 
@@ -492,7 +512,9 @@ def improve_file(
                     prompt_template = f.read()
                     # Use the current_code that includes previous improvements
                     prompt = prompt_template.replace("{code}", current_code)
-                    prompt += f"\nMaintain a maximum line length of {line_length} characters."
+                    prompt += (
+                        f"\nMaintain a maximum line length of {line_length} characters."
+                    )
 
                 success = False
                 for attempt in range(MAX_LLM_RETRIES):
@@ -512,7 +534,9 @@ def improve_file(
                             temperature=llm_temperature,
                             max_tokens=4096,  # Adjust as needed
                         )
-                        improved_code = clean_llm_response(response.choices[0].message.content)
+                        improved_code = clean_llm_response(
+                            response.choices[0].message.content
+                        )
 
                         # Validate syntax
                         try:
@@ -534,12 +558,14 @@ def improve_file(
 
                 if debug:
                     console.print(f"[debug]Category {category} improvements:")
-                    diff = list(difflib.unified_diff(
-                        current_code.splitlines(),
-                        improved_code.splitlines(),
-                        fromfile=f"before_{category}",
-                        tofile=f"after_{category}"
-                    ))
+                    diff = list(
+                        difflib.unified_diff(
+                            current_code.splitlines(),
+                            improved_code.splitlines(),
+                            fromfile=f"before_{category}",
+                            tofile=f"after_{category}",
+                        )
+                    )
                     console.print("\n".join(diff))
 
             except Exception as e:
@@ -681,8 +707,8 @@ def generate_tests(
             )
             start_time = time.time()
             error_message = (
-                fixed_tests  # Use the error message from fix_tests
-            )
+                fixed_tests
+            )  # Use the error message from fix_tests
             try:
                 response = client.chat.completions.create(
                     model=llm_model,
@@ -951,6 +977,7 @@ def create_info_file(
         else:
             f.write("  No tests performed.\n")
 
+
 def create_commit(
     repo: git.Repo,
     file_paths: List[str],  # Now accepts a list of file paths
@@ -981,11 +1008,12 @@ def create_commit(
     except Exception as e:
         console.print(f"[red]Error creating commit:[/red] {e}")
         logging.exception("Error creating commit")
-        exit(1)
+        sys.exit(1)
+
 
 def format_for_commit_and_pr(file_improvements: Dict[str, str]) -> Tuple[str, str]:
     """Formats improvements for commit message (title and body) and PR body."""
-    
+
     # Title:  Concise, mentioning all files.
     title = f"Improved: {', '.join(file_improvements.keys())}"
 
@@ -997,14 +1025,14 @@ def format_for_commit_and_pr(file_improvements: Dict[str, str]) -> Tuple[str, st
 
     return title, body
 
-def create_pull_request(
-    repo_obj: git.Repo,
+
+def create_pull_request_programatically(
     repo_url: str,
     token: str,
     base_branch: str,
     head_branch: str,
-    commit_title: str,  # Now separate title
-    commit_body: str,   # and body
+    commit_title: str,
+    commit_body: str,
     analysis_results: Dict[str, Dict[str, Any]],
     test_results: Dict[str, Any],
     file_paths: List[str],
@@ -1024,24 +1052,12 @@ def create_pull_request(
         repo_name = repo_url.replace("https://github.com/", "")
         gh_repo = g.get_repo(repo_name)
 
-        # --- PUSH THE BRANCH ---
-        try:
-            if force_push:
-                repo_obj.git.push("--force", "origin", head_branch)
-            else:
-                repo_obj.git.push("origin", head_branch)
-            console.print(f"[green]Branch pushed to GitHub: {head_branch}[/green]")
-        except git.exc.GitCommandError as e:
-            console.print(f"[red]Error pushing branch to GitHub: {e}[/red]")
-            logging.exception("Error pushing branch")
-            exit(1)
-
         # Create the PR using the PyGithub repo object
         pr = gh_repo.create_pull(
             title=commit_title,  # Use the separate title
-            body=commit_body,    # Use the separate body
-            head=f"{g.get_user().login}:{head_branch}",  # Correct head format
-            base=base_branch
+            body=commit_body,  # Use the separate body
+            head=head_branch,  # Correct head format: "user:branch"
+            base=base_branch,
         )
 
         console.print(f"[green]Pull Request created:[/green] {pr.html_url}")
@@ -1049,11 +1065,17 @@ def create_pull_request(
     except Exception as e:
         console.print(f"[red]Error creating Pull Request:[/red] {e}")
         logging.exception("Error creating Pull Request")
-        exit(1)
+        sys.exit(1)
+
 
 @click.command()
 @click.option("--repo", "-r", required=True, help="GitHub repository URL.")
-@click.option("--files", "-f", required=True, help="Comma-separated relative paths to files to improve.")
+@click.option(
+    "--files",
+    "-f",
+    required=True,
+    help="Comma-separated relative paths to files to improve.",
+)
 @click.option("--branch", "-b", required=True, help="Target branch name.")
 @click.option(
     "--token", "-t", required=True, help="GitHub Personal Access Token (PAT)."
@@ -1165,9 +1187,9 @@ def create_pull_request(
     type=int,
     default=DEFAULT_LINE_LENGTH,
     help="Maximum line length for code formatting.",
-)  # Added line-length
-
-
+)
+@click.option("--fork-repo", is_flag=True, help="Automatically fork the repository.")
+@click.option("--fork-user", default=None, help="Your GitHub username (if different).")
 def main(
     repo: str,
     files: str,
@@ -1196,6 +1218,8 @@ def main(
     output_file: str,
     output_info: str,
     line_length: int,
+    fork_repo: bool,
+    fork_user: str,
 ) -> None:
     """
     Improves a Python file in a GitHub repository, generates tests, and creates a Pull Request.
@@ -1203,11 +1227,9 @@ def main(
     if no_output:
         console.print = lambda *args, **kwargs: None  # Disable console output
 
-    # Load configuration, prioritizing command-line arguments
+    # --- API Key and Client Initialization ---
     ctx = click.get_current_context()
-    config_values = (
-        ctx.default_map if ctx.default_map else {}
-    )  # Get existing config
+    config_values = ctx.default_map if ctx.default_map else {}
     api_base = config_values.get(
         "openai_api_base", openai_api_base or os.getenv("OPENAI_API_BASE")
     )
@@ -1219,7 +1241,6 @@ def main(
         console.print(f"[yellow]API Key from env/config: {api_key}[/yellow]")
         console.print(f"[yellow]Effective Configuration: {config_values}[/yellow]")
 
-    # --- API Key and Client Initialization ---
     if api_key and api_key.lower() == "none":
         api_key = None  # Treat "none" as not provided
 
@@ -1227,32 +1248,77 @@ def main(
         client = OpenAI(
             api_key="dummy", base_url=api_base, timeout=OPENAI_TIMEOUT
         )  # Use dummy key with custom base URL
-    elif api_key:  # Only create client with api_key if it's actually provided
-        client = OpenAI(
-            api_key=api_key, timeout=OPENAI_TIMEOUT
-        )  # Standard OpenAI client
+    elif api_key:
+        client = OpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT)
     else:
         console.print(
-            "[red]Error: OpenAI API key not found.  Set OPENAI_API_KEY environment"
+            "[red]Error: OpenAI API key not found. Set OPENAI_API_KEY environment"
             " variable, use --config, or --openai-api-key.[/red]"
         )
-        exit(1)
+        sys.exit(1)
 
     if cache_dir:
         os.makedirs(cache_dir, exist_ok=True)  # Create cache directory
 
+    # --- FORK HANDLING ---
+    if fork_repo:
+        # 1. Get the user's GitHub username
+        if not fork_user:
+            try:
+                g = Github(token)
+                fork_user = g.get_user().login
+            except Exception as e:
+                console.print(
+                    f"[red]Error getting GitHub username: {e}.  Please provide --fork-user.[/red]"
+                )
+                sys.exit(1)
+        console.print(f"[blue]Using GitHub username for forking: {fork_user}[/blue]")
+
+        # 2. Fork the repository using PyGithub
+        try:
+            g = Github(token)
+            original_repo_name = repo.replace("https://github.com/", "")
+            original_repo = g.get_repo(original_repo_name)
+            forked_repo = original_repo.create_fork()
+            repo_url = forked_repo.clone_url  # Use the URL of the *forked* repo
+            console.print(f"[green]Forked repository to: {repo_url}[/green]")
+
+            # --- ADD DELAY HERE ---
+            time.sleep(5)  # Wait 5 seconds (adjust as needed)
+            
+        except Exception as e:
+            console.print(f"[red]Error forking repository: {e}[/red]")
+            sys.exit(1)
+
+    else:  # No forking
+        repo_url = repo
+        # 1. Get the user's GitHub username
+        if not fork_user:
+            try:
+                g = Github(token)
+                fork_user = g.get_user().login
+            except Exception as e:
+                console.print(
+                    f"[red]Error getting GitHub username: {e}.  Please provide --fork-user.[/red]"
+                )
+                sys.exit(1)
+
     # --- Repository Cloning and Branch Handling ---
-    repo_obj, temp_dir = clone_repository(repo, token)  # Clone the repository
+    repo_obj, temp_dir = clone_repository(
+        repo_url, token
+    )  # Clone the fork or original
     files_list = [f.strip() for f in files.split(",")]
-    final_commit_message = "" # Initialize an empty string to store the commit message
-    improved_files_info = {} # Store per-file improvements
+    final_commit_message = (
+        ""  # Initialize an empty string to store the commit message
+    )
+    improved_files_info = {}  # Store per-file improvements
     pr_url = None  # Initialize pr_url here
 
     # --- Branch Creation (BEFORE processing files) ---
     combined_file_purpose = "general_improvements"
     new_branch_name = create_branch(repo_obj, files_list, combined_file_purpose)
     checkout_branch(repo_obj, branch)  # Checkout the target branch
-    checkout_branch(repo_obj, new_branch_name) # Checkout new branch
+    checkout_branch(repo_obj, new_branch_name)  # Checkout new branch
 
     for file in files_list:
         file_path = os.path.join(temp_dir, file)
@@ -1277,7 +1343,7 @@ def main(
                 exclude_tools.split(","),
                 cache_dir,
                 debug,
-                line_length
+                line_length,
             )
             console.print("[blue]Test generation phase...[/blue]")
             generated_tests = generate_tests(
@@ -1288,7 +1354,7 @@ def main(
                 test_framework,
                 llm_custom_prompt,
                 debug,
-                line_length
+                line_length,
             )
             if generated_tests:
                 tests_generated = True
@@ -1363,12 +1429,13 @@ def main(
                 llm_model,
                 llm_temperature,
             )
-            formatted_summary = format_llm_summary(llm_improvements_summary)  # Deduplicated summary
+            formatted_summary = format_llm_summary(
+                llm_improvements_summary
+            )  # Deduplicated summary
         else:
             formatted_summary = "No LLM-driven improvements were made."
 
-        improved_files_info[file] = formatted_summary # Store the formatted summary
-
+        improved_files_info[file] = formatted_summary  # Store the formatted summary
 
         # --- Save Improved Code (if requested) ---
         if output_file:
@@ -1378,14 +1445,18 @@ def main(
                 output_file_for_current = os.path.abspath(output_file_for_current)
                 with open(output_file_for_current, "w", encoding="utf-8") as f:
                     f.write(improved_code)
-                console.print(f"[green]Improved code for {file} saved to: {output_file_for_current}[/green]")
+                console.print(
+                    f"[green]Improved code for {file} saved to: {output_file_for_current}[/green]"
+                )
 
             except Exception as e:
-                 console.print(
+                console.print(
                     f"[red]Error saving improved code to {output_file_for_current}: {e}[/red]"
                 )
-                 logging.exception("Error saving improved code to %s", output_file_for_current)
-                 exit(1)
+                logging.exception(
+                    "Error saving improved code to %s", output_file_for_current
+                )
+                sys.exit(1)
 
         # --- Create and Save Info File ---
         create_info_file(
@@ -1401,31 +1472,52 @@ def main(
 
     # --- Commit and Pull Request (outside the file loop) ---
     if not dry_run:
-      # Format for commit and PR
-      commit_title, commit_body = format_for_commit_and_pr(improved_files_info)
-      create_commit(repo_obj, files_list, f"{commit_title}\n\n{commit_body}", test_results) # combine title and body
-      if not local_commit:
-          create_pull_request(
-              repo_obj,
-              repo,
-              token,
-              branch,
-              new_branch_name,
-              commit_title,  # Pass the title
-              commit_body,   # Pass the body
-              final_analysis_results,
-              test_results,
-              files_list,
-              llm_optimization_level,
-              test_framework,
-              min_coverage,
-              coverage_fail_action,
-              temp_dir,
-              categories_list,
-              debug,
-              force_push
-          )
+        # Format for commit and PR
+        commit_title, commit_body = format_for_commit_and_pr(improved_files_info)
+        create_commit(
+            repo_obj,
+            files_list,
+            f"{commit_title}\n\n{commit_body}",
+            test_results,
+        )  # combine title and body
+        if not local_commit:
+            # --- PUSH (to your fork) ---
+            try:
+                if force_push:
+                    repo_obj.git.push("--force", "origin", new_branch_name)
+                else:
+                    repo_obj.git.push("origin", new_branch_name)
+                console.print(
+                    f"[green]Branch pushed to your fork: {new_branch_name}[/green]"
+                )  # Clearer message
+            except git.exc.GitCommandError as e:
+                console.print(
+                    f"[red]Error pushing branch to your fork: {e}[/red]"
+                )  # and here
+                logging.exception("Error pushing branch")
+                sys.exit(1)  # Use sys.exit
 
+            # --- CREATE PULL REQUEST (from your fork to the original repo) ---
+            # This is the key part that changes:
+            create_pull_request_programatically(
+                repo,  # Original Repo
+                token,  # Your Token
+                branch,  # Base Branch (e.g., main, develop)
+                f"{fork_user}:{new_branch_name}",  # Head branch: YOURUSER:your-branch-name
+                commit_title,
+                commit_body,
+                final_analysis_results,
+                test_results,
+                files_list,
+                llm_optimization_level,
+                test_framework,
+                min_coverage,
+                coverage_fail_action,
+                temp_dir,  # Pass temp_dir instead of repo_path
+                categories_list,
+                debug,
+                force_push,
+            )
 
     # --- Save JSON Log ---
     log_data = {
@@ -1436,7 +1528,9 @@ def main(
         "pr_url": pr_url,
         "timestamp": datetime.datetime.now().isoformat(),
     }
-    log_dir = os.path.join("/Users/fab/GitHub/FabGPT", "logs") # set up your correct log dir
+    log_dir = os.path.join(
+        "/Users/fab/GitHub/FabGPT", "logs"
+    )  # set up your correct log dir
     os.makedirs(log_dir, exist_ok=True)
     log_file_path = os.path.join(log_dir, f"log_{int(time.time())}.json")
     with open(log_file_path, "w", encoding="utf-8") as log_file:
@@ -1447,7 +1541,8 @@ def main(
         shutil.rmtree(temp_dir)
 
     console.print("[green]All operations completed successfully.[/green]")
-    exit(0)
+    sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

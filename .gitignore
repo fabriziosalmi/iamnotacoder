@@ -5,3 +5,4 @@ report.txt
 __pycache__
 logs/
 *.json
+report.txt

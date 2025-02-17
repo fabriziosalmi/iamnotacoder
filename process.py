@@ -8,8 +8,8 @@ from rich.progress import track
 from rich.text import Text  # Import Text for styled text
 
 
-def run_fabgpt(repo_url, python_file, github_token, config_file, default_branch="main", console=None):
-    """Runs fabgpt.py with the given parameters."""
+def run_fabgpt(repo_url, python_file, github_token, config_file, default_branch="main", console=None, fork_repo=False):
+    """Runs fabgpt.py with the given parameters, including forking support."""
     if console is None:
         console = Console()
 
@@ -23,6 +23,13 @@ def run_fabgpt(repo_url, python_file, github_token, config_file, default_branch=
             "-t", github_token,
             "--config", config_file
         ]
+
+        # Add fork-related options if needed
+        if fork_repo:
+            command.extend(["--fork-repo"])
+            #  We can get the username from the token if needed, but it's better
+            #  to have it as separate argument if we're submitting to other's repo
+            # command.extend(["--fork-user", <your_github_username>])  # Add if needed
 
         if not os.path.exists("fabgpt.py"):
             console.print("[red]Error: fabgpt.py not found in the current directory.[/red]")
@@ -49,6 +56,7 @@ def run_fabgpt(repo_url, python_file, github_token, config_file, default_branch=
         return False, "", str(e)
 
 
+
 def main():
     parser = argparse.ArgumentParser(description="Run fabgpt.py on multiple repositories.")
     parser.add_argument("-i", "--input", required=True, help="Path to the input JSON file.")
@@ -56,6 +64,9 @@ def main():
     parser.add_argument("-c", "--config", required=True, help="Path to the config.toml file.")
     parser.add_argument("-b", "--branch", default="main", help="Default branch to use (default: main).")
     parser.add_argument("-o", "--output", help="Path to the output JSON file (optional).")
+    parser.add_argument("--fork", action="store_true", help="Fork the repository before making changes.") # Add fork option
+    # parser.add_argument("--fork-user", default=None, help="GitHub username for forking (if needed).")  #Optional, we can obtain it from the token.
+
     args = parser.parse_args()
 
     console = Console()
@@ -96,7 +107,7 @@ def main():
         console.print(f"[cyan]Processing repo: {repo_url}, file: {python_file}[/cyan]")  # Indicate current repo/file
 
 
-        success, stdout, stderr = run_fabgpt(repo_url, python_file, args.token, args.config, args.branch, console=console)
+        success, stdout, stderr = run_fabgpt(repo_url, python_file, args.token, args.config, args.branch, console=console, fork_repo=args.fork) #Pass fork_repo
 
         if success:
             # Use Text for consistent styling within the table
@@ -117,5 +128,6 @@ def main():
             console.print(f"[green]Results saved to {args.output}[/green]")
         except Exception as e:
             console.print(f"[red]Error writing to output file: {e}[/red]")
+
 if __name__ == "__main__":
     main()
