@@ -1120,8 +1120,8 @@ def create_pull_request(
     token: str,
     base_branch: str,
     head_branch: str,
-    commit_message: str,
-    analysis_results: Dict[str, Dict[str, Any]],
+    commit_message: str,  # Pass the complete commit message
+    analysis_results: Dict[str, Dict[str, Any]],  # Keep these for potential future use
     test_results: Dict[str, Any],
     file_path: str,
     optimization_level: str,
@@ -1139,49 +1139,17 @@ def create_pull_request(
         repo_name = repo_url.replace("https://github.com/", "")
         repo = g.get_repo(repo_name)
 
-        # Define category icons
-        category_icons = {
-            "changes": "✨",
-            "static_analysis": "⚠️",
-            "style": "🎨",
-            "maintenance": "🛠️",
-            "security": "🔒",
-            "performance": "⚡",
-            "testing": "🧪",
-            "documentation": "📚",
-            "refactor": "♻️",
-            "bugfix": "🐛",
-            "feature": "✨"
-        }
 
         # Extract the commit message components
         commit_lines = commit_message.split('\n\n')
-        pr_title = commit_lines[0]
+        pr_title = commit_lines[0]  # First line is the title
 
         # Construct PR body with rich formatting
         body = f"## {os.path.basename(file_path)} Improvements\n\n"
 
-        # Add commit message content with preserved formatting and icons
-        for section in commit_lines[1:]:
-            # Changes Made section
-            if "Changes Made:" in section:
-                body += f"{category_icons['changes']} " + section.replace("**Changes Made:**", "**Changes Made:**") + "\n\n"
-
-            # Static Analysis section
-            elif "Static Analysis" in section:
-                body += f"{category_icons['static_analysis']} " + section.replace("**Static Analysis", "**Static Analysis") + "\n\n"
-
-            # Category-specific improvements
-            elif any(f"{cat.capitalize()} Improvements:" in section for cat in categories):
-                for cat in categories:
-                    if f"{cat.capitalize()} Improvements:" in section:
-                        icon = category_icons.get(cat.lower(), "✨")
-                        body += f"{icon} " + section + "\n\n"
-                        break
-
-            # Test Results section
-            elif "Test Results:" in section:
-                body += f"{category_icons['testing']} " + section + "\n\n"
+        # Add commit message content, preserving formatting.
+        for section in commit_lines[1:]:  # Skip the title line
+            body += section + "\n\n"
 
         # Create the PR
         pr = repo.create_pull(
@@ -1197,8 +1165,6 @@ def create_pull_request(
         console.print(f"[red]Error creating Pull Request:[/red] {e}")
         logging.exception("Error creating Pull Request")
         exit(1)
-
-
 
 
 @click.command()
