@@ -242,7 +242,11 @@ Write test for {file_base_name}.py file:
 **Example**
 
 ```python
-python3 iamnotacoder.py --repo https://github.com/fabriziosalmi/testrepo --files script2.py  -b main -t $GITHUB_TOKEN --config config.toml --fork-repo
+# setup with local LMStudio
+export OPENAI_API_KEY=none
+export OPENAI_API_BASE=http://localhost:1234/v1
+
+python3 iamnotacoder.py --repo https://github.com/fabriziosalmi/testrepo --files script2.py  -b main -t $GITHUB_TOKEN --config config.toml --fork-repo 
 
 Forking repository to user: fabriziosalmi
 Forked repository to: https://github.com/fabriziosalmi/testrepo.git

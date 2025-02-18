@@ -1,10 +1,81 @@
-    openai_api_key = "none"
-    openai_api_base = "http://localhost:1234/v1"  # Per LM Studio, se applicabile
-    llm_model = "qwen2.5-coder-7b-instruct-mlx"
-    llm_temperature = 0.2
-    llm_optimization_level = "balanced"
-    tools = "black,isort,pylint,flake8"
-    exclude_tools = ""
-    test_framework = "pytest"
-    min_coverage = 80     # Minimum test coverage percentage required for the tests to pass.
-    coverage_fail_action = "warn"
+# ----------------------------------------------------------------------
+# Configuration File
+# ----------------------------------------------------------------------
+
+# --- General Settings ---
+# Configure the connection to the LLM and overall behavior.
+
+[general]
+openai_api_key = "none"  # OpenAI API key. Use "none" for local LLMs.
+openai_api_base = "http://localhost:1234/v1"  # API endpoint (LM Studio, etc.).
+llm_model = "qwen2.5-coder-7b-instruct-mlx"  # LLM model name.
+llm_temperature = 0.2  # Lower values are more deterministic (0.0 - 2.0).
+llm_optimization_level = "balanced"  # "fast", "balanced", "thorough" (future use).
+llm_custom_prompt = "."  # Path to custom prompt directory (prompt_*.txt).
+
+
+# --- Static Analysis Tools ---
+# Define which static analysis tools to use and exclude.
+
+[static_analysis]
+tools = "black,isort,pylint,flake8,mypy"  # Comma-separated list of tools.
+exclude_tools = ""  # Tools to exclude, even if listed in 'tools'.
+
+
+# --- Testing Configuration ---
+# Settings related to test generation and execution.
+
+[testing]
+test_framework = "pytest"  # Supported test framework (currently only "pytest").
+min_coverage = 80.0  # Minimum code coverage percentage (None to disable).
+coverage_fail_action = "warn"  # "fail" (exit) or "warn" on low coverage.
+
+
+# --- Commit and Pull Request Options ---
+# Control commit and PR creation behavior.
+
+[commit_pr]
+commit_message = ""  # Custom commit message (prepended to default).
+no_dynamic_analysis = false  # Disable dynamic analysis (testing).
+local_commit = false  # Only create a local commit (no PR).
+force_push = false  # Force-push the branch (use with caution!).
+
+
+# --- Caching and Logging ---
+# Configure caching and output verbosity.
+
+[caching_logging]
+cache_dir = "."  # Directory for static analysis cache.
+debug = false  # Enable verbose debug output.
+no_output = false  # Suppress most console output.
+output_info = "report.txt"  # Name of the generated report file.
+
+
+# --- LLM Improvement Categories ---
+# Specify the categories for LLM-driven code improvements.
+
+[llm_categories]
+categories = "style,maintenance,security,performance"  # Match prompt filenames.
+
+
+# --- Code Formatting ---
+# Settings related to code style and formatting.
+
+[code_formatting]
+line_length = 79  # Maximum line length (for Black, isort).
+
+
+# --- Forking ---
+# Configure automatic repository forking.
+
+[forking]
+fork_repo = true  # Automatically fork the repository.
+fork_user = ""  # Your GitHub username (auto-detected if blank).
+
+
+# --- Advanced/Less Common Options ---
+# Options that are less frequently modified.
+
+[advanced]
+fast = false  # Enable fast mode (currently a no-op).
+output_file = ""  # Save improved file to this path (defaults to overwrite).
