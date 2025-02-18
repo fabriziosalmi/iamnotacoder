@@ -260,7 +260,8 @@ The `process.py` script acts as a conductor, efficiently running `iamnotacoder.p
       2 Items added to JSON
       0 Items skipped (already present)
       Results saved to 20250218-074839-10repos-Min700-Max1500-Quality20.0-20240219-20250218.json
-```
+    ```
+    
     This command searches for up to 10 repositories, includes Python files with a "quality score" (lines of code in this example) of 20 or less, and saves the results to `output.json`.  You can adjust parameters like `--min-lines`, `--max-lines`, `--start-date`, and `--end-date` to refine your search.
 
 2.  **Process the Results with process.py:**
