@@ -239,6 +239,51 @@ Write test for {file_base_name}.py file:
 11. **Reporting:** 📝 A text report (`report.txt` or as specified by `--output-info`) and a JSON log file are generated.
 12. **Cleanup:** 🧹 The temporary directory is removed (unless `--debug` is enabled).
 
+**Example**
+
+```python
+python3 iamnotacoder.py --repo https://github.com/fabriziosalmi/testrepo --files script2.py  -b main -t $GITHUB_TOKEN --config config.toml --fork-repo
+
+Forking repository to user: fabriziosalmi
+Forked repository to: https://github.com/fabriziosalmi/testrepo.git
+Cloning repository (shallow): https://github.com/fabriziosalmi/testrepo.git
+Repository cloned to: /var/folders/h8/6y19287n1sx6t9r4nmxwmpgw0000gn/T/tmp74ks4vg9 in 0.63 seconds
+Creating branch: improvement-script2_py-code_improvements-20250218-080049-b68c5b8f
+Created branch: improvement-script2_py-code_improvements-20250218-080049-b68c5b8f in 0.02 seconds
+Checking out branch: main
+Checked out branch: main in 0.40 seconds
+Checking out branch: improvement-script2_py-code_improvements-20250218-080049-b68c5b8f
+Checked out branch: improvement-script2_py-code_improvements-20250218-080049-b68c5b8f in 0.41 seconds
+Running static analysis...
+⣽ Running analysis... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Running black 0:00:00
+⢿ Running analysis... ━━━━━━━━━━━━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━ Running pylint 0:00:00     
+Test generation phase...
+LLM test generation request took 17.47 seconds.
+Test file written to: /var/folders/h8/6y19287n1sx6t9r4nmxwmpgw0000gn/T/tmp74ks4vg9/../tests/test_script2.py
+Tests directory not found: /var/folders/h8/6y19287n1sx6t9r4nmxwmpgw0000gn/T/tmp74ks4vg9/tests
+File improvement phase...
+Backup created: /var/folders/h8/6y19287n1sx6t9r4nmxwmpgw0000gn/T/tmp74ks4vg9/script2.py.bak.20250218_080109
+Command `black --line-length=79 /var/folders/h8/6y19287n1sx6t9r4nmxwmpgw0000gn/T/tmp74ks4vg9/script2.py` executed in 0.10 
+seconds.
+Command `isort /var/folders/h8/6y19287n1sx6t9r4nmxwmpgw0000gn/T/tmp74ks4vg9/script2.py` executed in 0.08 seconds.
+🌏  Improving category: style ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0:00:17 Starting...
+🌎  Improving category: maintenance ━━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0:00:32 Starting...
+🌍  Improving category: security ━━━━━━━━━━━━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━ 0:01:08 Starting...
+🌍  Improving category: performance ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╺━━━━━━━━━ 0:01:35 Starting...
+Running static analysis...
+⣽ Running analysis... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━              
+⣽ Running analysis... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━              
+⣻ Running analysis... ━━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━             
+⣟ Running analysis... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╺━━━━━━━━━ 
+Creating commit...
+Commit created successfully.
+Pushing branch to remote (attempt 1/3)...
+Branch pushed successfully after 1 attempt(s).
+Creating Pull Request...
+Pull Request created: https://github.com/fabriziosalmi/testrepo/pull/49
+All operations completed successfully.
+```
+
 ## II. `scraper.py` and `process.py`: The Finder and Orchestrator 🔍⚙️
 
 ### Overview

@@ -830,7 +830,11 @@ def create_commit(
     try:
         console.print("[blue]Creating commit...[/blue]")
         for fp in file_paths:
-            repo.git.add(fp)
+            full_fp = os.path.join(repo.working_tree_dir, fp)
+            if os.path.exists(full_fp):
+                repo.git.add(fp)
+            else:
+                console.print(f"[yellow]Warning: '{fp}' not found. Skipping.[/yellow]")
         if test_results is not None: # Only add tests dir if tests were run/generated
             tests_dir = os.path.join(repo.working_tree_dir, "tests")
             if os.path.exists(tests_dir):
@@ -1053,6 +1057,7 @@ def main(
 
     repo_obj, temp_dir = clone_repository(repo_url_to_clone, token)
     files_list = [f.strip() for f in files.split(",")]
+    categories_list = [c.strip() for c in categories.split(",")]
     improved_files_info = {}
     pr_url = None
 
@@ -1075,8 +1080,6 @@ def main(
             console.print(f"[red]Error reading file {file}: {e}. Skipping.[/red]")
             logging.error(f"Error reading file {file}: {e}. Skipping.")
             continue # Skip to next file if reading fails
-
-        categories_list = [c.strip() for c in categories.split(",")]
 
         analysis_results = {}
         test_results: Optional[Dict[str, Any]] = None # Explicitly type test_results
@@ -1136,6 +1139,10 @@ def main(
             categories_list, llm_optimization_level, output_info, min_coverage
         )
 
+    # New: If no file improvements were made, do not create commit or PR.
+    if not improved_files_info:
+        console.print("[yellow]No file improvements detected. Skipping commit and pull request creation.[/yellow]")
+        sys.exit(0)
 
     if not dry_run:
         commit_title, commit_body = format_commit_and_pr_content(improved_files_info)
