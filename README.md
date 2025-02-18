@@ -252,9 +252,16 @@ The `process.py` script acts as a conductor, efficiently running `iamnotacoder.p
 1.  **Run the Scraper:**
 
     ```bash
-    python scraper.py --token YOUR_GITHUB_TOKEN --max-repos 10 --quality-threshold 50 --output output.json
-    ```
-    This command searches for up to 10 repositories, includes Python files with a "quality score" (lines of code in this example) of 50 or less, and saves the results to `output.json`.  You can adjust parameters like `--min-lines`, `--max-lines`, `--start-date`, and `--end-date` to refine your search.
+      python3 scraper.py --max-repos 10 --max-workers 1 --min-lines 700 --max-lines 1500 --quality-threshold 20
+                 
+      Initial Rate Limit Status: Core Remaining: 4470, Search Remaining: 30
+      Searching repositories... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00 0:00:01
+      Processing repositories... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00 0:00:50
+      2 Items added to JSON
+      0 Items skipped (already present)
+      Results saved to 20250218-074839-10repos-Min700-Max1500-Quality20.0-20240219-20250218.json
+```
+    This command searches for up to 10 repositories, includes Python files with a "quality score" (lines of code in this example) of 20 or less, and saves the results to `output.json`.  You can adjust parameters like `--min-lines`, `--max-lines`, `--start-date`, and `--end-date` to refine your search.
 
 2.  **Process the Results with process.py:**
 
