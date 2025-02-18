@@ -1060,6 +1060,8 @@ def main(
     checkout_branch(repo_obj, branch) # Checkout target branch first
     checkout_branch(repo_obj, new_branch_name) # Then new improvement branch
 
+    test_results = None  # <-- Initialize test_results here to avoid UnboundLocalError
+
     # Initialize final_analysis_results to avoid UnboundLocalError if not set in the loop.
     final_analysis_results = {}
 
