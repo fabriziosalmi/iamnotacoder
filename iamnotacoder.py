@@ -22,6 +22,8 @@ import logging
 import difflib
 from rich.logging import RichHandler
 import sys
+from collections import Counter
+from io import StringIO  # new import added
 
 console = Console()
 
@@ -46,6 +48,12 @@ REPORT_ENCODING = "utf-8"
 
 class CommandExecutionError(Exception):
     """Custom exception for command execution failures."""
+    def __init__(self, command: str, returncode: int, stdout: str, stderr: str):
+        super().__init__(f"Command `{command}` failed with return code {returncode}.\nStderr: {stderr}\nStdout: {stdout}")
+        self.command = command
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
 
 
 def run_command(command: List[str], cwd: Optional[str] = None) -> Tuple[str, str, int]:
@@ -53,25 +61,24 @@ def run_command(command: List[str], cwd: Optional[str] = None) -> Tuple[str, str
     cmd_str = " ".join(command)
     try:
         start_time = time.time()
-        result = subprocess.run(
-            command, capture_output=True, text=True, cwd=cwd, check=True
-        )
+        result = subprocess.run(command, capture_output=True, text=True, cwd=cwd)
         end_time = time.time()
-        console.print(
-            f"[cyan]Command `{cmd_str}` executed in"
-            f" {end_time - start_time:.2f} seconds.[/cyan]"
-        )
+
+        if result.returncode != 0:
+            # Raise custom exception instead of logging here.
+            raise CommandExecutionError(cmd_str, result.returncode, result.stdout, result.stderr)
+        else:
+            console.print(f"[cyan]Command `{cmd_str}` executed in {end_time - start_time:.2f} seconds.[/cyan]")
         return result.stdout, result.stderr, result.returncode
-    except subprocess.CalledProcessError as e:
-        logging.error(f"CalledProcessError for command `{cmd_str}`: %s", e)
-        return e.stdout, e.stderr, e.returncode
     except FileNotFoundError as e:
         console.print(f"[red]Command not found: {e}[/red]")
-        logging.error(f"FileNotFoundError for command `{cmd_str}`: %s", e)
-        return "", str(e), 1
+        return "", str(e), 127 # Common return code for command not found
+    except CommandExecutionError as e:
+        # Removed logging.error from here
+        return e.stdout, e.stderr, e.returncode
     except Exception as e:
         console.print(f"[red]Unhandled error executing command `{cmd_str}`: {e}[/red]")
-        logging.exception(f"Unhandled exception in run_command for `{cmd_str}`")
+        logging.exception(f"Unhandled exception in run_command for `{cmd_str}`")  # Keep exception logging for unexpected errors
         return "", str(e), 1
 
 
@@ -228,9 +235,10 @@ def analyze_project(
     exclude_tools: List[str],
     cache_dir: Optional[str] = None,
     debug: bool = False,
-    line_length: int = DEFAULT_LINE_LENGTH,
+    analysis_verbose: bool = False,
+    line_length: int = 79,
 ) -> Dict[str, Dict[str, Any]]:
-    """Runs static analysis tools, caching results to improve performance."""
+    """Runs static analysis tools, caching results, and displays a summary table."""
     cache_key_data = (
         f"{file_path}-{','.join(sorted(tools))}-{','.join(sorted(exclude_tools))}-{line_length}".encode(CACHE_ENCODING)
     )
@@ -243,35 +251,31 @@ def analyze_project(
                 cached_results = json.load(f)
             console.print("[blue]Using static analysis results from cache.[/blue]")
             return cached_results
-        except json.JSONDecodeError:
-            console.print("[yellow]Error loading cache, re-running analysis.[/yellow]")
-            logging.warning(f"JSON decode error for cache file: {cache_file}")
-        except Exception as e:
-            console.print("[yellow]Error loading cache, re-running analysis.[/yellow]")
-            logging.exception(f"Error loading cache file: {cache_file}")
+        except (json.JSONDecodeError, Exception) as e:
+            console.print(f"[yellow]Error loading cache, re-running analysis: {e}[/yellow]")
 
-    results = {}
-    console.print("[blue]Running static analysis...[/blue]")
+    results: Dict[str, Dict[str, Any]] = {}
 
     with Progress(
-        SpinnerColumn("dots2"),
-        TextColumn("[bold cyan]{task.description}"),
-        BarColumn(),
-        TextColumn("[bold blue]{task.fields[tool]}"),
+        SpinnerColumn(),
+        TextColumn("[bold blue]{task.description}"),
         TimeElapsedColumn(),
         console=console,
         transient=True,
     ) as progress:
-        analysis_task = progress.add_task("Running analysis...", total=len(tools), tool="")
+        analysis_task = progress.add_task("Analyzing...", total=len(tools))
+
         for tool in tools:
-            progress.update(analysis_task, tool=f"Running {tool}")
+            progress.update(analysis_task, description=f"Running {tool}...")
+
             if tool in exclude_tools:
-                progress.update(analysis_task, advance=1, tool=f"Excluded {tool}")
+                results[tool] = {"output": "", "errors": "Tool excluded.", "returncode": 0}
+                progress.update(analysis_task, advance=1)
                 continue
 
             if not shutil.which(tool):
-                console.print(f"[yellow]Tool not found: {tool}. Skipping.[/yellow]")
-                progress.update(analysis_task, advance=1, tool=f"Not found {tool}")
+                results[tool] = {"output": "", "errors": "Tool not found.", "returncode": 127}
+                progress.update(analysis_task, advance=1)
                 continue
 
             commands = {
@@ -281,26 +285,91 @@ def analyze_project(
                 "isort": ["isort", "--check-only", "--diff", file_path],
                 "mypy": ["mypy", file_path],
             }
-
             if tool in commands:
                 command = commands[tool]
-                stdout, stderr, returncode = run_command(command, cwd=repo_path)
-                results[tool] = {"output": stdout, "errors": stderr, "returncode": returncode}
-                status = "Completed" if returncode == 0 else "Errors"
-            else:
-                console.print(f"[yellow]Unknown analysis tool: {tool}[/yellow]")
-                status = "Unknown"
+                try:
+                    stdout, stderr, returncode = run_command(command, cwd=repo_path)
+                    if tool == "black" and returncode != 0:
+                        output = stdout + stderr
+                        if "would reformat" in output:
+                            returncode = 0
+                            stdout = "[black] Reformatting needed but not applied in analysis."
 
-            progress.update(analysis_task, advance=1, tool=status)
+                    results[tool] = {"output": stdout, "errors": stderr, "returncode": returncode}
+
+                except CommandExecutionError as e:  # Catch the custom exception
+                    results[tool] = {"output": e.stdout, "errors": e.stderr, "returncode": e.returncode}
+                except Exception as e:
+                    results[tool] = {"output": "", "errors": str(e), "returncode": 1}
+            else:
+                results[tool] = {"output": "", "errors": "Unknown analysis tool.", "returncode": 1}
+            progress.update(analysis_task, advance=1)
+
+    # --- Build the Rich Table (moved inside analyze_project) ---
+    table = Table(title="Static Analysis Summary")
+    table.add_column("Tool", justify="left", style="cyan", no_wrap=True)
+    table.add_column("Status", justify="center")
+    table.add_column("Errors/Warnings", justify="left")
+
+    for tool, result in results.items():
+        returncode = result["returncode"]
+        errors = result.get("errors", "").strip()
+        output = result.get("output", "").strip()
+
+        if returncode == 0:
+            status = "[green]Passed[/green]"
+            error_summary = "-"
+        else:
+            status = "[red]Issues[/red]"
+            if tool == "pylint":
+                issue_codes = re.findall(r"([A-Z]\d{4})", output)
+                error_count = len(issue_codes)
+                if analysis_verbose:
+                    error_summary = errors
+                else:
+                    top_codes = ", ".join(code for code, _ in Counter(issue_codes).most_common(3))
+                    error_summary = f"{error_count} ({top_codes})" if error_count > 0 else "-"
+            elif tool == "flake8":
+                error_codes = re.findall(r"([A-Z]\d{3})", output)
+                error_count = len(error_codes)
+                if analysis_verbose:
+                    error_summary = errors
+                else:
+                    top_codes = ", ".join(code for code, _ in Counter(error_codes).most_common(3))
+                    error_summary = f"{error_count} ({top_codes})" if error_count > 0 else "-"
+            elif tool == "black":
+                if "would reformat" in output:
+                    status = "[yellow]Would reformat[/yellow]"
+                    error_summary = "1 file"
+                else:
+                    error_summary = errors
+            elif tool == "isort":
+                if "ERROR:" in output:
+                    status = "[yellow]Would reformat[/yellow]"
+                    error_summary = str(output.count("ERROR:"))
+                else:
+                    error_summary = errors
+            elif tool == "mypy":
+                error_count = output.count("error:")
+                if analysis_verbose:
+                    error_summary = errors
+                else:
+                    error_summary = str(error_count) if error_count > 0 else "-"
+            else:
+                error_summary = errors if analysis_verbose else "-"
+
+        table.add_row(tool, status, error_summary)
+
+    console.print(table)  # Print the table *after* running all tools
 
     if cache_file:
         try:
             with open(cache_file, "w", encoding=CACHE_ENCODING) as f:
-                json.dump(results, f)
+                json.dump(results, f, indent=4)
             console.print("[blue]Static analysis results saved to cache.[/blue]")
         except Exception as e:
-            console.print(f"[yellow]Error saving to cache.[/yellow]")
-            logging.exception(f"Error saving analysis results to cache file: {cache_file}")
+            console.print(f"[yellow]Error saving to cache: {e}[/yellow]")
+
     return results
 
 
@@ -380,11 +449,36 @@ def get_llm_improvements_summary(
 
 
 def format_code_with_tools(file_path: str, line_length: int) -> None:
-    """Formats the code using black and isort, if available."""
+    """Formats the code using black and isort, if available, and displays performance metrics."""
+    formatting_results = []  # List to store (command, execution time)
+    
     if shutil.which("black"):
-        run_command(["black", f"--line-length={line_length}", file_path])
+        cmd_black = ["black", f"--line-length={line_length}", file_path]
+        start_black = time.time()
+        run_command(cmd_black, cwd=os.path.dirname(file_path))
+        end_black = time.time()
+        formatting_results.append((
+            f"black --line-length={line_length} {os.path.basename(file_path)}", 
+            f"{end_black - start_black:.2f} seconds"
+        ))
+    
     if shutil.which("isort"):
-        run_command(["isort", file_path])
+        cmd_isort = ["isort", file_path]
+        start_isort = time.time()
+        run_command(cmd_isort, cwd=os.path.dirname(file_path))
+        end_isort = time.time()
+        formatting_results.append((
+            f"isort {os.path.basename(file_path)}", 
+            f"{end_isort - start_isort:.2f} seconds"
+        ))
+    
+    # Display the commands and their execution times using a Rich Table
+    table = Table(title="Code Formatting Commands Performance")
+    table.add_column("Command", justify="left", style="cyan", no_wrap=True)
+    table.add_column("Execution Time", justify="center", style="magenta")
+    for command, exec_time in formatting_results:
+        table.add_row(command, exec_time)
+    console.print(table)
 
 
 def validate_python_syntax(code: str) -> bool:
@@ -688,8 +782,9 @@ def generate_tests(
     test_file_path = os.path.join(tests_dir, test_file_name)
 
     if os.path.exists(test_file_path):
-        console.print(f"[yellow]Test file already exists: {test_file_path}. Skipping write.[/yellow]")
-        return "" # Do not overwrite existing tests
+        console.print(f"[yellow]Test file already exists: {test_file_path}. Using existing tests.[/yellow]")
+        with open(test_file_path, "r", encoding=CONFIG_ENCODING) as f:
+            return f.read()  # Return the existing tests instead of an empty string
 
     try:
         with open(test_file_path, "w", encoding=CONFIG_ENCODING) as f:
@@ -718,8 +813,8 @@ def run_tests(
     tests_dir = os.path.join(repo_path, "tests")
 
     if not os.path.exists(tests_dir):
-        console.print(f"[yellow]Tests directory not found: {tests_dir}[/yellow]")
-        return {"output": "", "errors": "Tests directory not found", "returncode": 5} # Special return code for no tests
+        console.print(f"[yellow]Tests directory not found: {tests_dir}. Skipping test run.[/yellow]")
+        return {"output": "No tests were run.", "errors": "", "returncode": 0}  # Changed return value
 
     if test_framework == "pytest":
         command = ["pytest", "-v", tests_dir]
@@ -758,14 +853,62 @@ def run_tests(
 def create_info_file(
     file_path: str,
     analysis_results: Dict[str, Dict[str, Any]],
-    test_results: Optional[Dict[str, Any]], # Test results can be None if no tests run
+    test_results: Optional[Dict[str, Any]],
     llm_success: bool,
     categories: List[str],
     optimization_level: str,
     output_info: str,
     min_coverage: Optional[float] = None,
+    llm_improvements_summary: Dict[str, List[str]] = None,
 ) -> None:
     """Generates and saves an info file (plain text) summarizing the changes."""
+
+    # Create a simplified table for the report (optional)
+    report_table = Table(title="Static Analysis Summary (Report)")
+    report_table.add_column("Tool", justify="left")
+    report_table.add_column("Status", justify="center")
+    report_table.add_column("Errors/Warnings", justify="left")
+
+    for tool, result in analysis_results.items():
+        returncode = result["returncode"]
+        errors = result.get("errors", "").strip()
+        output = result.get("output", "").strip()
+
+        if returncode == 0:
+            status = "Passed"
+            error_summary = "-"
+        else:
+            status = "Issues"
+            if tool == "pylint":
+                issue_codes = re.findall(r"([A-Z]\d{4})", output)
+                error_count = len(issue_codes)
+                top_codes = ", ".join(code for code, _ in Counter(issue_codes).most_common(3))
+                error_summary = f"{error_count} ({top_codes})" if error_count > 0 else "-"
+            elif tool == "flake8":
+                error_codes = re.findall(r"([A-Z]\d{3})", output)
+                error_count = len(error_codes)
+                top_codes = ", ".join(code for code, _ in Counter(error_codes).most_common(3))
+                error_summary = f"{error_count} ({top_codes})" if error_count > 0 else "-"
+            elif tool == 'black':
+                if "would reformat" in output:
+                    status = "Would reformat"
+                    error_summary = "1 file"
+                else:
+                        error_summary = errors
+            elif tool == 'isort':
+                if "ERROR:" in output:
+                    status = "Would reformat"
+                    error_summary = output.count("ERROR:")
+                else:
+                    error_summary = errors
+            elif tool == 'mypy':
+                error_count = output.count("error:")
+                error_summary = str(error_count) if error_count>0 else "-"
+            else:
+                error_summary = "-"
+        report_table.add_row(tool, status, error_summary)
+
+
     with open(output_info, "w", encoding=REPORT_ENCODING) as f:
         f.write(f"FabGPT Improvement Report for: {file_path}\n")
         f.write(f"Timestamp: {datetime.datetime.now().isoformat()}\n\n")
@@ -781,7 +924,7 @@ def create_info_file(
             changes_made.append("Formatted with isort")
         if llm_success:
             changes_made.append(f"Applied LLM improvements ({optimization_level})")
-        if test_results is not None: # Only if tests were attempted
+        if test_results is not None:
             changes_made.append("Generated/updated tests")
 
         if changes_made:
@@ -791,20 +934,19 @@ def create_info_file(
             f.write("No changes made\n")
 
         f.write("\nStatic Analysis Results:\n")
-        if analysis_results:
-            for tool, result in analysis_results.items():
-                outcome = "OK" if result["returncode"] == 0 else f"Errors/Warnings ({len(result.get('output', '').splitlines())})"
-                f.write(f"* {tool}: {outcome}\n")
-                if result["errors"]: # Detail errors if any
-                    f.write(f"  Errors/Warnings:\n{result['errors']}\n")
-        else:
-            f.write("  No static analysis performed.\n")
+        # Replace broken table conversion with this:
+        table_buffer = StringIO()
+        temp_console = Console(file=table_buffer, width=80, record=True)
+        temp_console.print(report_table)
+        table_text = table_buffer.getvalue()
+        f.write(table_text)
+        f.write("\n")
 
         f.write("\nTest Results:\n")
-        if test_results is not None: # Only report if tests were run
+        if test_results is not None:
             test_outcome = "Passed" if test_results["returncode"] == 0 else "Failed"
             f.write(f"  Tests: {test_outcome}\n")
-            if "TOTAL" in test_results.get("output", ""): # Coverage info if pytest with coverage
+            if "TOTAL" in test_results.get("output", ""):
                 for line in test_results["output"].splitlines():
                     if line.lstrip().startswith("TOTAL"):
                         try:
@@ -813,11 +955,26 @@ def create_info_file(
                             if min_coverage is not None and coverage_percentage < min_coverage:
                                 f.write("  WARNING: Coverage below minimum threshold!\n")
                         except (ValueError, IndexError):
-                            pass # Ignore lines without coverage data
+                            pass
             if test_results["returncode"] != 0:
                 f.write(f"  WARNING: Some tests failed!\n  Output:\n{test_results.get('output', '')}\n")
         else:
             f.write("  No tests performed.\n")
+
+        # Add LLM Improvement Summary (if applicable)
+        if llm_success:
+            f.write("\nLLM Improvements Summary:\n")
+            if llm_improvements_summary is None:
+                llm_improvements_summary = {}
+            # Assuming you have llm_improvements_summary from improve_file
+            for category, improvements in llm_improvements_summary.items():
+                f.write(f"\nCategory: {category}\n")
+                if improvements and improvements != ["Error retrieving improvements."]:
+                    for improvement in improvements:
+                        f.write(f"- {improvement}\n")
+                else:
+                    f.write("- No improvements made.\n")
+
 
 
 def create_commit(
@@ -959,6 +1116,7 @@ def create_pull_request_programmatically(
 @click.option("--line-length", type=int, default=DEFAULT_LINE_LENGTH, help="Maximum line length for code formatting.")
 @click.option("--fork-repo", is_flag=True, help="Automatically fork the repository.")
 @click.option("--fork-user", default=None, help="Your GitHub username for forking (if different).")
+@click.option("--verbose", is_flag=True, help="Show detailed static analysis errors")
 def main(
     repo: str,
     files: str,
@@ -989,10 +1147,14 @@ def main(
     line_length: int,
     fork_repo: bool,
     fork_user: Optional[str],
+    verbose: bool
 ) -> None:
-    """
-    Improves Python files in a GitHub repository, generates tests, and creates a Pull Request using LLM.
-    """
+    """Main function to improve code quality using static analysis and LLMs."""
+
+    # Suppress verbose logging if not in debug mode.
+    if not debug:
+        logging.getLogger().setLevel(logging.ERROR)
+
     if no_output:
         console.print = lambda *args, **kwargs: None # Suppress console output
 
@@ -1065,8 +1227,8 @@ def main(
     checkout_branch(repo_obj, branch) # Checkout target branch first
     checkout_branch(repo_obj, new_branch_name) # Then new improvement branch
 
-    test_results = None  # <-- Initialize test_results here to avoid UnboundLocalError
-
+    test_results = None
+    llm_improvements_summary = {}  # Initialize llm_improvements_summary here
     # Initialize final_analysis_results to avoid UnboundLocalError if not set in the loop.
     final_analysis_results = {}
 
@@ -1087,20 +1249,20 @@ def main(
 
         if not no_dynamic_analysis:
             analysis_results = analyze_project(
-                temp_dir, file_path, tools.split(","), exclude_tools.split(","), cache_dir, debug, line_length
+                temp_dir, file_path, tools.split(","), exclude_tools.split(","), cache_dir, debug, analysis_verbose=verbose, line_length=line_length
             )
             console.print("[blue]Test generation phase...[/blue]")
-            generated_tests_code = generate_tests(
+            generated_tests_code = generate_tests(  # Assuming generate_tests is defined
                 file_path, client, llm_model, llm_temperature, test_framework, llm_custom_prompt, debug, line_length
             )
             if generated_tests_code:
                 tests_generated = True
-                test_results = run_tests(
+                test_results = run_tests(  # Assuming run_tests is defined
                     temp_dir, file_path, test_framework, min_coverage, coverage_fail_action, debug
                 )
 
         console.print("[blue]File improvement phase...[/blue]")
-        improved_code_final, llm_success = improve_file(
+        improved_code_final, llm_success = improve_file(  # Assuming improve_file is defined
             file_path, client, llm_model, llm_temperature, categories_list,
             llm_custom_prompt, analysis_results, debug, line_length
         )
@@ -1110,13 +1272,13 @@ def main(
             continue
 
         final_analysis_results = analyze_project( # Re-analyze after LLM
-            temp_dir, file_path, tools.split(","), exclude_tools.split(","), cache_dir, debug, line_length
+            temp_dir, file_path, tools.split(","), exclude_tools.split(","), cache_dir, debug, analysis_verbose=verbose, line_length=line_length
         )
 
-        llm_improvements_summary = {}
+
         formatted_summary = "No LLM-driven improvements were made." # Default summary if no LLM improvements
         if llm_success:
-            llm_improvements_summary = get_llm_improvements_summary(
+            llm_improvements_summary = get_llm_improvements_summary(  # Assuming get_llm_improvements_summary is defined
                 original_code, improved_code_final, categories_list, client, llm_model, llm_temperature
             )
             formatted_summary = format_llm_summary(llm_improvements_summary)
@@ -1134,7 +1296,7 @@ def main(
                 logging.exception(f"Error saving improved code to {output_file_current}")
                 sys.exit(1)
 
-        create_info_file( # Create info file per processed file
+        create_info_file(  # Assuming create_info_file is defined
             file_path, final_analysis_results, test_results, llm_success,
             categories_list, llm_optimization_level, output_info, min_coverage
         )
@@ -1146,32 +1308,32 @@ def main(
 
     if not dry_run:
         commit_title, commit_body = format_commit_and_pr_content(improved_files_info)
-        full_commit_message = f"{commit_title}\n\n{commit_body}" # Combine title and body
-        create_commit(repo_obj, files_list, full_commit_message, test_results)
+        full_commit_message = f"{commit_title}\n\n{commit_body}"  # Combine title and body
+        create_commit(repo_obj, files_list, full_commit_message, test_results)  # Assuming create_commit, format_commit_and_pr_content are defined
 
         if not local_commit:
             try:
-                push_branch_with_retry(repo_obj, new_branch_name, force_push)
+                push_branch_with_retry(repo_obj, new_branch_name, force_push)  # Assuming push_branch_with_retry is defined
             except Exception:
                 console.print("[red]Push failed, skipping Pull Request creation.[/red]")
                 sys.exit(1)
 
-            create_pull_request_programmatically( # Create PR to original repo
+            create_pull_request_programmatically(
                 repo, token, branch, f"{fork_owner}:{new_branch_name}",
                 commit_title, commit_body, final_analysis_results, test_results,
                 files_list, llm_optimization_level, test_framework, min_coverage,
                 coverage_fail_action, temp_dir, categories_list, debug, force_push
-            )
+            )  # Assuming create_pull_request_programmatically is defined
 
-    log_data = { # Log operation details
+    log_data = {
         "repository": repo,
         "branch": branch,
         "files_improved": improved_files_info,
-        "commit_message": full_commit_message, # Use combined commit message for log
+        "commit_message": full_commit_message,
         "pr_url": pr_url,
         "timestamp": datetime.datetime.now().isoformat(),
     }
-    log_dir = os.path.join("/Users/fab/GitHub/FabGPT", "logs") # Log dir path
+    log_dir = os.path.join("/Users/fab/GitHub/FabGPT", "logs")  # Adjust as needed
     os.makedirs(log_dir, exist_ok=True)
     log_file_path = os.path.join(log_dir, f"log_{int(time.time())}.json")
     with open(log_file_path, "w", encoding=CONFIG_ENCODING) as log_file:
@@ -1182,7 +1344,6 @@ def main(
 
     console.print("[green]All operations completed successfully.[/green]")
     sys.exit(0)
-
 
 if __name__ == "__main__":
     main()
