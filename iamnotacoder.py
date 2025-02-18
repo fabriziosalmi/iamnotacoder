@@ -24,6 +24,7 @@ from rich.logging import RichHandler
 import sys
 from collections import Counter
 from io import StringIO  # new import added
+from rich import box  # new import for consistent rich bar styling
 
 console = Console()
 
@@ -146,14 +147,12 @@ def clone_repository(repo_url: str, token: str) -> Tuple[git.Repo, str]:
     temp_dir = tempfile.mkdtemp()
     auth_repo_url = repo_url.replace("https://", f"https://{token}@")
     try:
-        console.print(f"[blue]Cloning repository (shallow): {repo_url}[/blue]")
-        start_time = time.time()
-        repo = git.Repo.clone_from(auth_repo_url, temp_dir, depth=1)
-        end_time = time.time()
-        console.print(
-            f"[green]Repository cloned to: {temp_dir} in"
-            f" {end_time - start_time:.2f} seconds[/green]"
-        )
+        with Progress(SpinnerColumn(), TextColumn("[bold blue]Cloning repository (shallow)..."), TimeElapsedColumn(), transient=True) as progress:
+            task = progress.add_task("Cloning repository...", start=True)
+            start_time = time.time()
+            repo = git.Repo.clone_from(auth_repo_url, temp_dir, depth=1)
+            end_time = time.time()
+            progress.update(task, description=f"Repository cloned in {end_time - start_time:.2f} seconds", completed=100)
         return repo, temp_dir
     except git.exc.GitCommandError as e:
         console.print(f"[red]Error cloning repository: {e}[/red]")
@@ -165,26 +164,23 @@ def clone_repository(repo_url: str, token: str) -> Tuple[git.Repo, str]:
 def checkout_branch(repo: git.Repo, branch_name: str) -> None:
     """Checks out a specific branch, fetching if necessary. Exits on failure."""
     try:
-        console.print(f"[blue]Checking out branch: {branch_name}[/blue]")
-        start_time = time.time()
-        repo.git.fetch("--all", "--prune")
-        repo.git.checkout(branch_name)
-        end_time = time.time()
-        console.print(
-            f"[green]Checked out branch: {branch_name} in"
-            f" {end_time - start_time:.2f} seconds[/green]"
-        )
+        with Progress(SpinnerColumn(), TextColumn("[bold blue]Checking out branch..."), TimeElapsedColumn(), transient=True) as progress:
+            task = progress.add_task("Checking out branch...", start=True)
+            start_time = time.time()
+            repo.git.fetch("--all", "--prune")
+            repo.git.checkout(branch_name)
+            end_time = time.time()
+            progress.update(task, description=f"Checked out branch in {end_time - start_time:.2f} seconds", completed=100)
     except git.exc.GitCommandError:
         try:
             console.print(f"[yellow]Attempting to fetch remote branch {branch_name}[/yellow]")
-            start_time = time.time()
-            repo.git.fetch("origin", branch_name)
-            repo.git.checkout(f"origin/{branch_name}")
-            end_time = time.time()
-            console.print(
-                f"[green]Checked out remote branch: {branch_name} in"
-                f" {end_time - start_time:.2f} seconds[/green]"
-            )
+            with Progress(SpinnerColumn(), TextColumn("[bold blue]Checking out remote branch..."), TimeElapsedColumn(), transient=True) as progress:
+                task = progress.add_task("Checking out remote branch...", start=True)
+                start_time = time.time()
+                repo.git.fetch("origin", branch_name)
+                repo.git.checkout(f"origin/{branch_name}")
+                end_time = time.time()
+                progress.update(task, description=f"Checked out remote branch in {end_time - start_time:.2f} seconds", completed=100)
         except git.exc.GitCommandError as e:
             console.print(f"[red]Error checking out branch: {e}[/red]")
             logging.exception(f"Error checking out branch {branch_name}")
@@ -198,14 +194,12 @@ def create_branch(repo: git.Repo, files: List[str], file_purpose: str = "") -> s
     unique_id = uuid.uuid4().hex[:8] # Shorten UUID for branch name
     branch_name = f"improvement-{sanitized_file_names}-{file_purpose}-{timestamp}-{unique_id}"
     try:
-        console.print(f"[blue]Creating branch: {branch_name}[/blue]")
-        start_time = time.time()
-        repo.git.checkout("-b", branch_name)
-        end_time = time.time()
-        console.print(
-            f"[green]Created branch: {branch_name} in"
-            f" {end_time - start_time:.2f} seconds[/green]"
-        )
+        with Progress(SpinnerColumn(), TextColumn("[bold blue]Creating branch..."), TimeElapsedColumn(), transient=True) as progress:
+            task = progress.add_task("Creating branch...", start=True)
+            start_time = time.time()
+            repo.git.checkout("-b", branch_name)
+            end_time = time.time()
+            progress.update(task, description=f"Created branch in {end_time - start_time:.2f} seconds", completed=100)
         return branch_name
     except git.exc.GitCommandError as e:
         console.print(f"[red]Error creating branch: {e}[/red]")
@@ -306,7 +300,7 @@ def analyze_project(
             progress.update(analysis_task, advance=1)
 
     # --- Build the Rich Table (moved inside analyze_project) ---
-    table = Table(title="Static Analysis Summary")
+    table = Table(title="Static Analysis Summary", box=box.ROUNDED)
     table.add_column("Tool", justify="left", style="cyan", no_wrap=True)
     table.add_column("Status", justify="center")
     table.add_column("Errors/Warnings", justify="left")
@@ -472,8 +466,8 @@ def format_code_with_tools(file_path: str, line_length: int) -> None:
             f"{end_isort - start_isort:.2f} seconds"
         ))
     
-    # Display the commands and their execution times using a Rich Table
-    table = Table(title="Code Formatting Commands Performance")
+    # Display the commands and their execution times using a Rich Table with rounded box style
+    table = Table(title="Code Formatting Commands Performance", box=box.ROUNDED)
     table.add_column("Command", justify="left", style="cyan", no_wrap=True)
     table.add_column("Execution Time", justify="center", style="magenta")
     for command, exec_time in formatting_results:
@@ -864,7 +858,7 @@ def create_info_file(
     """Generates and saves an info file (plain text) summarizing the changes."""
 
     # Create a simplified table for the report (optional)
-    report_table = Table(title="Static Analysis Summary (Report)")
+    report_table = Table(title="Static Analysis Summary (Report)", box=box.ROUNDED)
     report_table.add_column("Tool", justify="left")
     report_table.add_column("Status", justify="center")
     report_table.add_column("Errors/Warnings", justify="left")
@@ -1186,27 +1180,23 @@ def main(
     repo_url_to_clone = repo # Default to original repo URL
     fork_owner = fork_user # User for forking
     if fork_repo:
-        if not fork_owner:
+        with Progress(SpinnerColumn(), TextColumn("[bold blue]Forking repository..."), TimeElapsedColumn(), transient=True) as progress:
+            task = progress.add_task("Forking repository...", start=True)
+            start_time = time.time()
             try:
                 github_client = Github(token)
-                fork_owner = github_client.get_user().login
+                original_repo = github_client.get_repo(repo.replace("https://github.com/", ""))
+                forked_repo = original_repo.create_fork()
+                repo_url_to_clone = forked_repo.clone_url
+                if not fork_owner:
+                    fork_owner = github_client.get_user().login
             except Exception as e:
-                console.print(f"[red]Error getting GitHub username: {e}. Please provide --fork-user.[/red]")
+                console.print(f"[red]Error forking repository: {e}. Please provide --fork-user.[/red]")
                 sys.exit(1)
-        console.print(f"[blue]Forking repository to user: {fork_owner}[/blue]")
-
-        try:
-            github_client = Github(token)
-            original_repo = github_client.get_repo(repo.replace("https://github.com/", ""))
-            forked_repo = original_repo.create_fork()
-            repo_url_to_clone = forked_repo.clone_url # Clone from forked repo URL
+            end_time = time.time()
+            progress.update(task, description=f"Forked repository in {end_time - start_time:.2f} seconds", completed=100)
             console.print(f"[green]Forked repository to: {repo_url_to_clone}[/green]")
-            time.sleep(5) # Wait for fork to be available
-        except Exception as e:
-            console.print(f"[red]Error forking repository: {e}[/red]")
-            sys.exit(1)
-
-    else: # No forking
+    else:
         repo_url_to_clone = repo
         if not fork_owner:
             try:
@@ -1215,7 +1205,6 @@ def main(
             except Exception as e:
                 console.print(f"[red]Error getting GitHub username: {e}. Please provide --fork-user.[/red]")
                 sys.exit(1)
-
 
     repo_obj, temp_dir = clone_repository(repo_url_to_clone, token)
     files_list = [f.strip() for f in files.split(",")]
