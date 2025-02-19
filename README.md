@@ -11,7 +11,7 @@ iamnotacoder is a powerful toolkit, fueled by Large Language Models (LLMs), that
 *   **`process.py` (The Orchestrator ⚙️):** Automates the execution of `iamnotacoder.py` on multiple repositories identified by `scraper.py`.
 
 **Bonus**
-*   **`create_app_from_scratch.py` (The Creator 🏗️):** A code generation tool that builds basic Python applications from natural language descriptions. It leverages a team of specialized LLM "actors" to handle different development tasks. Can be useful to prototype apps.
+*   **`create_app_from_scratch.py` (The Team 🏗️):** A code generation tool that builds basic Python applications from natural language descriptions. It leverages a team of specialized LLM "actors" to handle different development tasks. Can be useful to prototype apps.
 
 This README focuses primarily on `iamnotacoder.py` (the optimizer) and provides an overview of `create_app_from_scratch.py` (the creator).
 
