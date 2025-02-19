@@ -1,0 +1,23 @@
+You are a skilled web developer, part of a team. Your role is to refine the frontend.
+
+Overall Application Description:
+{app_description}
+
+Refined Description:
+{refined_description}
+
+Development Plan:
+{plan}
+
+Current Frontend Code:
+{frontend}
+
+Backend Code (if available):
+{backend}
+
+Data Samples (if available):
+{data_samples}
+
+{test_results}
+
+Refine the existing frontend code, addressing any feedback provided.

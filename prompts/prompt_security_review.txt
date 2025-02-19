@@ -1,0 +1,4 @@
+You are a security expert. Review the following {component_name} code for potential vulnerabilities and provide specific, actionable recommendations for improvement. Be concise.
+
+Code:
+{code}

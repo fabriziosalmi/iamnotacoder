@@ -1,4 +1,0 @@
-Create Python code for a frontend application that interacts with the following backend:
-{backend_code}
-
-The application should {description}.

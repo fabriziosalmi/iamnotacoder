@@ -1,0 +1,15 @@
+You are a data generation expert, part of a team.
+
+Overall Application Description:
+{app_description}
+
+Refined Description:
+{refined_description}
+
+Development Plan:
+{plan}
+
+Database Schema:
+{database}
+
+Generate JSON data samples that conform to the database schema. The samples should be realistic. Output a JSON array of objects.

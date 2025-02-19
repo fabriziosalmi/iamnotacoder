@@ -1,3 +1,0 @@
-Create Python code for a backend application that {description}.
-
-{existing_code}

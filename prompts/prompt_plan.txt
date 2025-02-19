@@ -1,0 +1,1 @@
+Create a development plan for an application with the following description: {refined_description}
