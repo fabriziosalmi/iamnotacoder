@@ -1,18 +1,29 @@
-You are a skilled web developer, part of a team. Your role is to develop the frontend.
+# prompt_frontend.txt
+Create a Streamlit application in Python based on the following description.  The app should have a sidebar for configuration and a main area for chat interaction.
 
-Overall Application Description:
-{app_description}
-
-Refined Description:
+**Description:**
 {refined_description}
 
-Development Plan:
-{plan}
+**Specific Requirements:**
 
-Backend Code (if available):
-{backend}
+*   **Sidebar:**  Include input fields for:
+    *   `openai_api_key` (Text Input, initially empty)
+    *   `openai_api_base` (Text Input, initially empty)
+    *   `openai_model` (Text Input, default: "gpt-3.5-turbo")
+    *   `temperature` (Slider, range 0.0 to 1.0, default 0.7)
+    *   `max_tokens` (Integer Slider, range 100 to 2048, default 512)
+*   **Main Area:**
+    *   Display chat messages (user and assistant) using `st.chat_message`.
+    *   Use `st.session_state` to store chat history.
+    *   Include a text input (`st.chat_input`) for the user to enter prompts.
+    *   Handle potential errors from the OpenAI API (e.g., invalid API key, network issues) and display user-friendly error messages.
+    * use st.spinner
 
-Data Samples (if available):
-{data_samples}
+**Output Format:**
 
-{test_results}
+Wrap the ENTIRE Python code within these delimiters:
+
+<--CODE_START-->
+```python
+# your code here
+```

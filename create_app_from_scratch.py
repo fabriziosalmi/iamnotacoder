@@ -2,7 +2,7 @@ import os
 import subprocess
 import toml
 import click
-from openai import OpenAI, Timeout
+from openai import OpenAI, Timeout, APIConnectionError, AuthenticationError
 import datetime
 import shutil
 from rich.console import Console
@@ -24,11 +24,11 @@ console = Console()
 logging.basicConfig(level=logging.INFO, format="%(message)s", handlers=[RichHandler(rich_tracebacks=True)])
 
 # Constants
-DEFAULT_LLM_MODEL = "local-model"  # More generic default
+DEFAULT_LLM_MODEL = "local-model"
 DEFAULT_LLM_TEMPERATURE = 0.2
 MAX_LLM_RETRIES = 3
 MAX_ITERATIONS = 3
-# OPENAI_TIMEOUT = 120.0  # No longer directly used
+OPENAI_TIMEOUT = 120.0
 CONFIG_ENCODING = "utf-8"
 
 # --- Helper Functions ---
@@ -57,9 +57,19 @@ def get_cli_config_priority(ctx: click.Context, param: click.Parameter, value: A
     ctx.default_map = config
     return config
 
-def extract_code_from_response(response_text: str) -> str:
-    code_blocks = re.findall(r"```(?:\w+)?\n(.*?)\n```", response_text, re.DOTALL)
-    return max(code_blocks, key=len, default="").strip() if code_blocks else response_text.strip()
+def extract_code(response_text: str, start_delimiter: str, end_delimiter: str) -> str:
+    """Extracts code between specified delimiters and removes Markdown code block syntax."""
+    try:
+        start_index = response_text.index(start_delimiter) + len(start_delimiter)
+        end_index = response_text.index(end_delimiter)
+        extracted_code = response_text[start_index:end_index].strip()
+
+        # Remove leading/trailing ``` and language specifier (e.g., ```python)
+        extracted_code = re.sub(r"^\s*```\w*\s*", "", extracted_code)  # Start
+        extracted_code = re.sub(r"\s*```\s*$", "", extracted_code)  # End
+        return extracted_code.strip()
+    except ValueError:
+        return ""
 
 def clean_code(code: str) -> str:
     return re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", code).strip()
@@ -73,7 +83,7 @@ class ProjectContext:
         self.plan: Optional[str] = None
         self.generated_code: Dict[str, str] = {}
         self.feedback: List[str] = []
-        self.test_results: Dict[str, str] = {} # Store test results per component
+        self.test_results: Dict[str, str] = {}
         self.deployment_results: Dict[str, Dict[str, Any]] = {}
 
 
@@ -90,7 +100,10 @@ class LLMActor:
     def _get_prompt(self, prompt_name: str, context: ProjectContext, replacements: Dict[str, str] = {}) -> Optional[str]:
         """Loads and formats a prompt, dynamically adjusting it based on context."""
         prompt_file = os.path.join(self.prompt_dir, f"prompt_{prompt_name}.txt")
-        cache_key = f"{prompt_name}_{hashlib.md5((str(replacements) + str(context)).encode()).hexdigest()}"
+        # Create a unique cache key based on prompt name, replacements, and context
+        combined_string = f"{prompt_name}_{str(replacements)}_{str(context.app_description)}_{str(context.refined_description)}_{str(context.plan)}_{str(context.generated_code)}_{str(context.test_results)}".encode()
+        cache_key = hashlib.md5(combined_string).hexdigest()
+
 
         if cache_key in self.prompt_cache:
             return self.prompt_cache[cache_key]
@@ -103,33 +116,23 @@ class LLMActor:
             with open(prompt_file, "r", encoding=CONFIG_ENCODING) as f:
                 prompt_template = f.read()
 
-            # --- Dynamic Replacements (Context-Aware) ---
-            # Initialize ALL possible keys with DEFAULTS *before* checking for specific values.
-            replacements.setdefault("app_description", context.app_description)
-            replacements.setdefault("initial_idea", context.app_description)
-            replacements.setdefault("refined_description", context.refined_description or "")
-            replacements.setdefault("plan", context.plan or "")
-            replacements.setdefault("backend", "")  # Add default for backend
-            replacements.setdefault("frontend", "")  # Add default for frontend (and others)
-            replacements.setdefault("database_schema", "")
-            replacements.setdefault("data_samples", "")
-            replacements.setdefault("test_results", "")
-
-            # Now, *update* the defaults with any available values.
-            for code_type, code in context.generated_code.items():
-                replacements[code_type] = code or ""  # Use direct assignment, now that the key exists
-
-            if self.role in context.test_results:
-                replacements["test_results"] = context.test_results[self.role]
-            # No else needed, we already set a default.
-
+            # Dynamic Replacements (Context-Aware)
+            replacements["app_description"] = context.app_description
+            replacements["initial_idea"] = context.app_description
+            replacements["refined_description"] = context.refined_description or ""
+            replacements["plan"] = context.plan or ""
+            replacements["backend"] = context.generated_code.get("backend", "")
+            replacements["frontend"] = context.generated_code.get("frontend", "")
+            replacements["database_schema"] = context.generated_code.get("database_schema", "")
+            replacements["data_samples"] = context.generated_code.get("data_samples", "")
+            replacements["test_results"] = context.test_results.get(self.role, "")
 
             formatted_prompt = prompt_template.format(**replacements)
             self.prompt_cache[cache_key] = formatted_prompt
             return formatted_prompt
 
         except KeyError as e:
-            console.print(f"[red]KeyError in _get_prompt: {e}[/red]")  #Should never happen now
+            console.print(f"[red]KeyError in _get_prompt: {e}[/red]")
             return None
         except Exception as e:
             console.print(f"[red]Error reading or formatting prompt file: {e}[/red]")
@@ -149,23 +152,25 @@ class LLMActor:
                         {"role": "user", "content": prompt}
                     ],
                     temperature=self.llm_temperature,
-                    #request_timeout=OPENAI_TIMEOUT  # REMOVED
+                    timeout=OPENAI_TIMEOUT
                 )
                 return response.choices[0].message.content.strip()
-            except Exception as e:  # Catch a broader range of exceptions
+            except (Timeout, APIConnectionError, AuthenticationError) as e:
                 if attempt == MAX_LLM_RETRIES - 1:
                     console.print(f"[red]LLM query failed after {MAX_LLM_RETRIES} attempts: {e}[/red]")
                     return None
                 else:
                     console.print(f"[yellow]LLM query failed (attempt {attempt + 1}/{MAX_LLM_RETRIES}): {e}. Retrying...[/yellow]")
                     time.sleep(2 ** attempt)  # Exponential backoff
+            except Exception as e:
+                console.print(f"[red]Unexpected error during LLM query: {e}[/red]")
+                return None
         return None
 
 class CreativeAssistant(LLMActor):
     def generate_description(self, initial_idea: str) -> Optional[str]:
-        # No context needed for initial description refinement
-        context = ProjectContext(initial_idea)  # Create context here
-        prompt = self._get_prompt("description", context)  # Pass ONLY the context
+        context = ProjectContext(initial_idea)
+        prompt = self._get_prompt("description", context)
         return self.query_llm(prompt) if prompt else None
 
 
@@ -202,8 +207,8 @@ class SecurityDeveloper(LLMActor):
     def review_code(self, code: str, component_name:str) -> Optional[str]:
         prompt = self._get_prompt("security_review", ProjectContext(""), {"code": code, "component_name": component_name})
         return self.query_llm(prompt) if prompt else None
-    def add_security_measures(self, code: str, vulnerabilities: str) -> Optional[str]:
-        prompt = self._get_prompt("add_security", ProjectContext(""), {"code": code, "vulnerabilities": vulnerabilities})
+    def add_security_measures(self, code: str, vulnerabilities: str, component_name: str) -> Optional[str]:
+        prompt = self._get_prompt("add_security", ProjectContext(""), {"code": code, "vulnerabilities": vulnerabilities, "component_name": component_name})
         return self.query_llm(prompt) if prompt else None
 
 class ProjectManager(LLMActor):
@@ -219,13 +224,15 @@ class ProjectManager(LLMActor):
         agents = [FrontendDeveloper]  # Always include Frontend
         description_lower = description.lower()
 
-        if any(keyword in description_lower for keyword in ["backend", "api", "server", "rest"]):
+        # Explicitly check for keywords indicating backend/database needs
+        if any(keyword in description_lower for keyword in ["rest api", "server-side", "database connection", "sql", "data persistence"]):
             agents.append(BackendDeveloper)
-        if any(keyword in description_lower for keyword in ["database", "sql", "postgres", "mysql", "mongodb", "db", "schema", "query"]):
+        if any(keyword in description_lower for keyword in ["sql", "database schema", "relational database", "nosql"]):
             agents.append(DatabaseDeveloper)
-        if data_samples_requested or DatabaseDeveloper in agents:
+        if data_samples_requested:
             agents.append(DataSampleGenerator)
         return agents
+
 
 class TestDeveloper(LLMActor):
     def create_tests(self, code: str, component_name: str) -> Optional[str]:
@@ -275,12 +282,13 @@ def create_application(
     repo_path: str,
     debug: bool = False,
     data_samples_requested: bool = False,
+    disable_security_checks: bool = False,
+    disable_tests: bool = False,
 ) -> None:
     """Orchestrates the LLM actors with iterative refinement."""
 
     context = ProjectContext(app_description)
 
-    # Initialize agents (outside the loop, as they are created only once)
     creative_assistant = CreativeAssistant(client, llm_model, llm_temperature, prompt_dir, role="creative_assistant")
     project_manager = ProjectManager(client, llm_model, llm_temperature, prompt_dir, role="project_manager")
     security_dev = SecurityDeveloper(client, llm_model, llm_temperature, prompt_dir, role="security_developer")
@@ -307,7 +315,6 @@ def create_application(
         live.update(console.render_str(f"[blue]Required agents: {', '.join([agent.__name__ for agent in required_agents])}[/]"))
 
         # 4. Agent Execution and Iterative Refinement
-		# Initialize all required agents
         agent_instances = {
             agent_class: agent_class(client, llm_model, llm_temperature, prompt_dir, role=agent_class.__name__.lower())
             for agent_class in required_agents
@@ -315,15 +322,20 @@ def create_application(
 
         for agent_class in required_agents:
             agent_name = agent_class.__name__
-            agent = agent_instances[agent_class] # Get the instance from the dictionary
+            agent = agent_instances[agent_class]
             live.update(console.render_str(f"[blue]Creating {agent_name}...[/]"))
-            component_name = agent_name.replace("Developer", "").lower()  # e.g., "backend", "frontend"
+            component_name = agent_name.replace("Developer", "").lower()
 
-            for iteration in range(MAX_ITERATIONS):
-                live.update(console.render_str(f"[blue]{agent_name}: Iteration {iteration + 1}/{MAX_ITERATIONS}[/]"))
+            # --- Check if iterations are needed ---
+            iterations_needed = not (disable_security_checks and disable_tests)
+
+            num_iterations = MAX_ITERATIONS if iterations_needed else 1 # Only one iteration if no checks
+
+            for iteration in range(num_iterations):
+                live.update(console.render_str(f"[blue]{agent_name}: Iteration {iteration + 1}/{num_iterations}[/]"))
 
                 # --- Code Generation ---
-                if iteration == 0: # First iteration
+                if iteration == 0:
                     if agent_name == "BackendDeveloper":
                         code = agent.create_backend(context)
                     elif agent_name == "FrontendDeveloper":
@@ -334,66 +346,87 @@ def create_application(
                         code = agent.generate_data_samples(context)
                     else:
                         code = None
-                else: # Refinement iterations
+                else:
                     if agent_name == "BackendDeveloper":
                         code = agent.refine_backend(context)
                     elif agent_name == "FrontendDeveloper":
                         code = agent.refine_frontend(context)
                     elif agent_name == "DatabaseDeveloper":
                         code = agent.refine_database_schema(context)
-                    else: # No refinement for DataSampleGenerator
+                    else:
                         code = None
 
 
                 if not code:
                     console.print(f"[red]Failed to create {component_name} code. Exiting.[/red]")
                     return
-                code = clean_code(code)
+
+                # --- Stricter Code Extraction ---
+                if agent_name in ["BackendDeveloper", "FrontendDeveloper", "DatabaseDeveloper"]:
+                    code = extract_code(code, "<--CODE_START-->", "<--CODE_END-->")
+                elif agent_name == "DataSampleGenerator":
+                    code = extract_code(code, "<--JSON_START-->", "<--JSON_END-->")  # or different delimiters if needed
                 context.generated_code[component_name] = code
 
-                # --- Security Review ---
-                vulnerabilities = security_dev.review_code(code, component_name)
-                if vulnerabilities and vulnerabilities.strip().lower() != "no vulnerabilities found.":
-                    console.print(f"[yellow]Identified Vulnerabilities in {component_name}:\n{vulnerabilities}[/yellow]")
-                    #  Store vulnerabilities in context for refinement
-                    context.feedback.append(f"{agent_name} Security Feedback: {vulnerabilities}")
 
-                # --- Test Creation ---
-                tests = test_dev.create_tests(code, component_name)
-                if tests:
-                    tests = clean_code(tests)
-                    test_file_path = os.path.join(repo_path, f"test_{component_name}.py")
-                    with open(test_file_path, "w", encoding=CONFIG_ENCODING) as f:
-                        f.write(tests)
+                # --- Security Review (Conditional) ---
+                if not disable_security_checks and code:
+                    vulnerabilities = security_dev.review_code(code, component_name)
+                    if vulnerabilities and "no vulnerabilities found" not in vulnerabilities.lower():
+                        console.print(f"[yellow]Identified Vulnerabilities in {component_name}:\n{vulnerabilities}[/yellow]")
+                        context.feedback.append(f"{agent_name} Security Feedback: {vulnerabilities}")
+                        # Apply security fixes
+                        fixed_code = security_dev.add_security_measures(code, vulnerabilities, component_name)
+                        if fixed_code:
+                            code = extract_code(fixed_code, "<--CODE_START-->", "<--CODE_END-->")
+                            context.generated_code[component_name] = code  # Update with fixed code
 
-                    # --- Run Tests and Store Results ---
-                    stdout, stderr, returncode = run_command(["pytest", test_file_path], cwd=repo_path)
-                    context.test_results[agent.role] = f"Test Results (stdout):\n{stdout}\nTest Results (stderr):\n{stderr}"
+                # --- Test Creation and Execution (Conditional) ---
+                if not disable_tests and code:
+                    tests = test_dev.create_tests(code, component_name)
+                    if tests:
+                        tests = extract_code(tests, "<--TEST_START-->", "<--TEST_END-->")
+                        test_file_path = os.path.join(repo_path, f"test_{component_name}.py")
+                        with open(test_file_path, "w", encoding=CONFIG_ENCODING) as f:
+                            f.write(tests)
 
-                    if returncode == 0:  # Tests passed
-                        console.print(f"[green]{agent_name}: Tests passed![/green]")
-                        break  # Exit refinement loop if tests pass
+                        # Run Tests and Store Results
+                        stdout, stderr, returncode = run_command(["pytest", test_file_path], cwd=repo_path)
+                        context.test_results[agent.role] = f"Test Results (stdout):\n{stdout}\nTest Results (stderr):\n{stderr}"
+
+                        if returncode == 0:
+                            console.print(f"[green]{agent_name}: Tests passed![/green]")
+                            break  # Exit refinement loop if tests pass
+                        else:
+                            console.print(f"[red]{agent_name}: Tests failed. Refining...[/red]")
+                            context.feedback.append(f"{agent_name} Test Feedback: Tests Failed")
                     else:
-                        console.print(f"[red]{agent_name}: Tests failed. Refining...[/red]")
-                        context.feedback.append(f"{agent_name} Test Feedback: Tests Failed") # Store test feedback
+                        console.print(f"[yellow]No tests generated for {component_name}.[/yellow]")
 
-                else: # If no tests created, skip testing.
-                    console.print(f"[yellow]No tests generated for {component_name}.[/yellow]")
-                    break
+                else:
+                    console.print(f"[yellow]Skipping tests for {component_name} as requested.[/yellow]")
 
-            # Write the final (potentially refined) code to file.
+
+
+            # Write the final code to file.
             if component_name != "data_samples":
                 file_path = os.path.join(repo_path, f"{component_name}.py")
                 with open(file_path, "w", encoding=CONFIG_ENCODING) as f:
                     f.write(context.generated_code[component_name])
                 console.print(f"[green]{agent_name}: Code written to {file_path}[/green]")
-            else: # Handle data samples
+            else:
                 file_path = os.path.join(repo_path, f"{component_name}.json")
                 with open(file_path, "w", encoding=CONFIG_ENCODING) as f:
                     f.write(context.generated_code[component_name])
                 console.print(f"[green]{agent_name}: Code written to {file_path}[/green]")
 
-        # 5. Deployment (Sandboxed)
+        # Create requirements.txt
+        requirements_path = os.path.join(repo_path, "requirements.txt")
+        with open(requirements_path, "w", encoding=CONFIG_ENCODING) as f:
+            f.write("streamlit\nopenai") # Basic requirements, add more as needed
+        console.print(f"[green]requirements.txt created at {requirements_path}[/green]")
+
+        # 5. Deployment (Sandboxed) - Still runs, but will be a no-op if no tests exist
         live.update(console.render_str("[blue]Running in sandbox...[/]"))
         context.deployment_results = deployer.run_in_sandbox(repo_path)
         for component, result in context.deployment_results.items():
@@ -423,6 +456,8 @@ def create_application(
 @click.option("--openai-api-base", default=None, help="Base URL for OpenAI API.")
 @click.option("--openai-api-key", default=None, help="OpenAI API Key.")
 @click.option("--data-samples", is_flag=True, help="Generate data samples.")
+@click.option("--disable-security-checks", is_flag=True, help="Disable security checks.")
+@click.option("--disable-tests", is_flag=True, help="Disable tests.")
 def theteam_cli(
     app_description: str,
     llm_model: str,
@@ -431,7 +466,9 @@ def theteam_cli(
     debug: bool,
     openai_api_base: Optional[str],
     openai_api_key: Optional[str],
-    data_samples: bool
+    data_samples: bool,
+    disable_security_checks: bool,
+    disable_tests: bool,
 ) -> None:
     """Creates an application from scratch using LLM actors."""
     ctx = click.get_current_context()
@@ -442,24 +479,25 @@ def theteam_cli(
     if debug:
         console.print("[yellow]Debug mode enabled.[/yellow]")
 
-    # --- CORRECTED API KEY/BASE HANDLING ---
-    if not api_base:  # Only require API key if no base URL
+    if not api_base:
         if not api_key:
             console.print("[red]Error: OpenAI API key is required when not using a custom base URL.[/red]")
             sys.exit(1)
     else:
-        # If api_base is provided, and no key is given, use a dummy key
         if not api_key:
              api_key = "dummy_key"
 
-    # --- CORRECTED CLIENT INITIALIZATION ---
-    client = OpenAI(api_key=api_key, base_url=api_base, timeout=120)
+    client = OpenAI(api_key=api_key, base_url=api_base, timeout=OPENAI_TIMEOUT)
 
-    project_path = os.path.join("/Users/fab/GitHub/iamnotacoder", f"project_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
+    script_dir = os.path.abspath(os.path.dirname(__file__))
+    prompt_dir = os.path.join(script_dir, "prompts")
+    os.makedirs(prompt_dir, exist_ok=True)  # Create prompts directory
+
+    project_path = os.path.join(script_dir, f"project_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
     os.makedirs(project_path, exist_ok=True)
     console.print(f"[blue]Creating application in directory: {project_path}[/blue]")
 
-    create_application(app_description, client, llm_model, llm_temperature, llm_custom_prompt, project_path, debug, data_samples)
+    create_application(app_description, client, llm_model, llm_temperature, prompt_dir, project_path, debug, data_samples, disable_security_checks, disable_tests)
 
 if __name__ == "__main__":
     theteam_cli()

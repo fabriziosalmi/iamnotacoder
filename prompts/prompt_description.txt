@@ -1,1 +1,7 @@
-Refine the following application description: {initial_idea}
+# prompt_description.txt
+Refine the following application idea into a clear and concise description, suitable for guiding the development of a Streamlit application. Focus on the core functionality and user interaction. Be specific about the features.
+
+Initial idea:
+{initial_idea}
+
+Refined Description:
