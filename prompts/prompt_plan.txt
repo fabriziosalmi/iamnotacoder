@@ -1,5 +1,5 @@
 # prompt_plan.txt
-Create a step-by-step development plan for building the following Streamlit application. Be concise, but include all necessary steps for a functional prototype.
+Create a step-by-step development plan for building the following application. Be concise, but include all necessary steps for a functional prototype.
 
 Application Description:
 {refined_description}

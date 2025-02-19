@@ -1,0 +1,5 @@
+Apply PEP 8 style guidelines to the following Python code without breaking any of the existing functionalities.  Return ONLY the modified Python code, and nothing else before or after. Do not include any explanations or introductory text.
+
+```python
+{code}
+```

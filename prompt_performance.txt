@@ -1,0 +1,14 @@
+Below is a Python file. Analyze it for potential performance bottlenecks and suggest improvements.  Focus on:
+
+- Efficient algorithms and data structures.
+- Reducing unnecessary computations.
+- Optimizing loops and iterations.
+- Using appropriate libraries for performance-critical tasks.
+- Do NOT break any of the existing functionality.
+
+If you identify any bottlenecks, modify the code to improve performance. If no performance improvements are identified or if you cannot make a safe improvement, return the original code.
+Return ONLY the complete, modified Python code and nothing before or after.
+
+```python
+{code}
+```

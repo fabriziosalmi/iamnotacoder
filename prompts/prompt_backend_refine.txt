@@ -1,4 +1,4 @@
-You are a skilled Python developer, part of a team creating an application.  Your role is to refine the backend.
+You are a skilled developer, part of a team creating an application.  Your role is to refine the backend.
 
 Overall Application Description:
 {app_description}
