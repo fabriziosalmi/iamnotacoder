@@ -34,7 +34,7 @@ from io import StringIO
 from rich import box
 import toml
 import aiofiles  # type: ignore
-from openai import OpenAI  # Corrected import: Use the official class, not the module
+from openai import AsyncOpenAI  # Using AsyncOpenAI for asynchronous API calls
 
 
 from github import Github
@@ -442,7 +442,7 @@ async def get_llm_improvements_summary(
     original_code: str,
     improved_code: str,
     categories: List[str],
-    client: OpenAI,
+    client: AsyncOpenAI,
     llm_model: str,
     llm_temperature: float,
     config: Dict,  # Pass the config
@@ -465,7 +465,7 @@ async def get_llm_improvements_summary(
         )
 
         try:
-            response = client.chat.completions.create(
+            response = await client.chat.completions.create(  # CHANGED from acreate
                 model=llm_model,
                 messages=[
                     {
@@ -506,51 +506,145 @@ async def format_code_with_tools(file_path: str, line_length: int) -> None:
         await run_command(["isort", file_path], cwd=os.path.dirname(file_path))
 
 
-async def _process_category_improvement(category, code_snippet, start_line, end_line, config, custom_prompt_dir, client, llm_model, llm_temperature, debug, progress, task_id):
-    """Processes improvement for one category with granular progress updates."""
-    prompt = get_prompt(config, category, custom_prompt_dir)
-    if "{code}" not in prompt:
-        logging.error(f"Prompt for {category} missing {{code}} placeholder")
-        progress.update(task_id, advance=0, fields={"status": "Prompt Error"})
-        return None, 0
-    prompt = prompt.replace("{code}", code_snippet)
-    prompt += f"\nMaintain a maximum line length of {DEFAULT_LINE_LENGTH} characters."
-    if debug:
-        logging.debug(f"LLM prompt for {category}:\n{prompt}")
+async def _process_category_improvement(
+    category, 
+    code_snippet, 
+    start_line, 
+    end_line, 
+    config, 
+    custom_prompt_dir, 
+    client, 
+    llm_model, 
+    llm_temperature, 
+    debug, 
+    progress, 
+    task_id,
+    analysis_data: Optional[Dict[str, Any]] = None  # <-- NEW parameter for error info
+):
+    """
+    Processes improvement for one category with granular progress updates.
+    Now uses dynamic prompt selection, multi-stage improvement chaining, and category-specific syntax checks.
+    """
+    # Mapping from error code to specific prompt file
+    error_prompt_mapping = {
+        "C0114": f"{custom_prompt_dir}/prompts/missing_docstring.txt",
+        "C0116": f"{custom_prompt_dir}/prompts/missing_function_docstring.txt",
+        # ...add more mappings as needed...
+    }
+    
+    # Dynamic prompt selection based on analysis_data error codes
+    selected_prompt = None
+    if analysis_data:
+        for err_code, prompt_file in error_prompt_mapping.items():
+            if err_code in analysis_data.get("errors", ""):
+                try:
+                    with open(prompt_file, "r", encoding="utf-8") as pf:
+                        selected_prompt = pf.read()
+                    if debug:
+                        logging.debug(f"Using dynamic prompt from {prompt_file} for error code {err_code}")
+                    break
+                except Exception as e:
+                    logging.warning(f"Could not load prompt for {err_code}: {e}")
+    
+    # Fallback generic prompt if no dynamic prompt found
+    if not selected_prompt:
+        selected_prompt = get_prompt(config, category, custom_prompt_dir)
+    
+    # Append code context and a formatting constraint.
+    base_prompt = selected_prompt.replace("{code}", code_snippet)
+    base_prompt += f"\nMaintain a maximum line length of {DEFAULT_LINE_LENGTH} characters."
+    
+    # Multi-stage prompt chain: Stage 1 - Identify Problem, Stage 2 - Plan Solution, Stage 3 - Implement Solution.
+    stages = [
+        ("Identify the problem in the code:", base_prompt),
+        ("Plan a step-by-step solution to fix the issue:", f"{base_prompt}\nConsider breaking down the solution into smaller steps."),
+        ("Implement the solution based on the plan:", f"{base_prompt}\nApply the planned solution."),
+    ]
+    
     retry_count = 0
-    for attempt in range(MAX_LLM_RETRIES):
-        retry_count = attempt + 1
-        progress.update(task_id, description=f"[blue]Improving {category} (attempt {attempt+1}/{MAX_LLM_RETRIES})[/blue]", fields={"status": "In progress..."})
-        logging.debug(f"LLM call for category '{category}', attempt {attempt+1}")
-        try:
-            response = client.chat.completions.create(
-                model=llm_model,
-                messages=[
-                    {"role": "system", "content": "You are a helpful coding assistant that improves code quality."},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=llm_temperature,
-                max_tokens=1024,
-                timeout=OPENAI_TIMEOUT,
-            )
-            improved_code_snippet = extract_code_from_response(response.choices[0].message.content)
-            if validate_python_syntax(improved_code_snippet):
-                progress.update(task_id, fields={"status": "Completed"})
-                return improved_code_snippet, retry_count
-            else:
-                logging.warning(f"Syntax error in LLM response for {category} on attempt {attempt+1}")
-        except Exception as e:
-            if "Rate limit" in str(e):
-                logging.error(f"Rate limit encountered for {category}: {e}")
-            else:
-                logging.exception(f"LLM error in category {category} on attempt {attempt+1}: {e}")
-    progress.update(task_id, fields={"status": "Failed"})
-    return None, retry_count
+    improved_code_snippet = None
+    for stage_label, stage_prompt in stages:
+        for attempt in range(MAX_LLM_RETRIES):
+            retry_count = attempt + 1
+            progress.update(task_id, description=f"[blue]Improving {category} - {stage_label} (attempt {attempt+1}/{MAX_LLM_RETRIES})[/blue]", fields={"status": "In progress..."})
+            current_prompt = stage_prompt
+            if attempt > 0:
+                # Chained prompt with enriched error context.
+                current_prompt = (
+                    f"Previous attempt produced syntax errors or did not resolve the issue.\n"
+                    f"Re-evaluate the following code snippet between lines {start_line} and {end_line}:\n{code_snippet}\n"
+                    f"Static analysis reports:\n{analysis_data.get('errors', 'No errors')}\n"
+                    f"{stage_prompt}"
+                )
+            if debug:
+                logging.debug(f"LLM prompt for {category} - {stage_label} (attempt {attempt+1}):\n{current_prompt}")
+            try:
+                response = await client.chat.completions.create(  # CHANGED from acreate
+                    model=llm_model,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful coding assistant that improves code quality."},
+                        {"role": "user", "content": current_prompt},
+                    ],
+                    temperature=llm_temperature,
+                    max_tokens=1024,
+                    timeout=OPENAI_TIMEOUT,
+                )
+                candidate_code = extract_code_from_response(response.choices[0].message.content)
+                # Validate syntax and perform category-specific checks.
+                if not validate_python_syntax(candidate_code):
+                    logging.warning(f"Syntax error in LLM response for {category} at stage '{stage_label}' on attempt {attempt+1}")
+                    continue
+                # Category-specific syntax check for 'security'.
+                if category.lower() == "security" and not is_security_compliant(candidate_code):
+                    logging.warning(f"Security issues detected in improved code for {category} at stage '{stage_label}' on attempt {attempt+1}")
+                    continue
+                # (Optional) Re-run static analysis for the category to validate improvement.
+                if analysis_data and not validate_category_improvement(candidate_code, analysis_data, category):
+                    logging.warning(f"Static analysis check failed for {category} at stage '{stage_label}' on attempt {attempt+1}")
+                    continue
+                
+                improved_code_snippet = candidate_code
+                progress.update(task_id, fields={"status": f"Stage '{stage_label}' completed"})
+                break  # Successful improvement at this stage.
+            except Exception as e:
+                logging.exception(f"LLM error in category {category} at stage '{stage_label}' on attempt {attempt+1}: {e}")
+        if improved_code_snippet is None:
+            progress.update(task_id, fields={"status": f"Stage '{stage_label}' failed"})
+            break  # Exit if current stage failed.
+        else:
+            # For chaining, use the improved output as the new code snippet for the next stage.
+            code_snippet = improved_code_snippet
+    if improved_code_snippet:
+        progress.update(task_id, fields={"status": "Completed"})
+    else:
+        progress.update(task_id, fields={"status": "Failed"})
+    return improved_code_snippet, retry_count
+
+# New helper function for security check (example implementation)
+def is_security_compliant(code: str) -> bool:
+    """
+    Performs basic security checks on the improved code.
+    Example: checks for usage of unsafe functions like eval or exec.
+    """
+    insecure_patterns = [r"\beval\(", r"\bexec\("]
+    for pattern in insecure_patterns:
+        if re.search(pattern, code):
+            return False
+    return True
+
+# New helper function for validating category-specific improvements (stub)
+def validate_category_improvement(code: str, analysis_data: Dict[str, Any], category: str) -> bool:
+    """
+    Placeholder for re-running static analysis for a specific category.
+    Returns True if the improvement is validated.
+    """
+    # ...existing code or integration with analysis tools...
+    return True
 
 
 async def apply_llm_improvements(
     file_path: str,
-    client: OpenAI,
+    client: AsyncOpenAI,
     llm_model: str,
     llm_temperature: float,
     categories: List[str],
@@ -602,7 +696,8 @@ async def apply_llm_improvements(
 
                 improved_snippet, attempts = await _process_category_improvement(
                     category, code_snippet, start_line, end_line, config, custom_prompt_dir,
-                    client, llm_model, llm_temperature, debug, progress, improve_task_id
+                    client, llm_model, llm_temperature, debug, progress, improve_task_id,
+                    analysis_results.get(category)  # Pass analysis data for the category
                 )
                 retry_counts[category] = attempts
                 if improved_snippet:
@@ -618,7 +713,7 @@ async def apply_llm_improvements(
 
 async def improve_file(
     file_path: str,
-    client: OpenAI,
+    client: AsyncOpenAI,
     llm_model: str,
     llm_temperature: float,
     categories: List[str],
@@ -725,7 +820,7 @@ async def improve_file(
 async def fix_tests_syntax_error(
     generated_tests: str,
     file_base_name: str,
-    client: OpenAI,
+    client: AsyncOpenAI,
     llm_model: str,
     llm_temperature: float,
 ) -> Tuple[str, bool]:
@@ -756,7 +851,7 @@ async def fix_tests_syntax_error(
 
 async def generate_tests(
     file_path: str,
-    client: OpenAI,
+    client: AsyncOpenAI,
     llm_model: str,
     llm_temperature: float,
     test_framework: str,
@@ -796,7 +891,7 @@ async def generate_tests(
     generated_tests = ""
     try:
         start_time = time.time()
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(  # CHANGED from acreate
             model=llm_model,
             messages=[
                 {
@@ -827,7 +922,7 @@ async def generate_tests(
             start_time = time.time()
             error_message = fixed_tests  # Error message contains code and error
             try:
-                response = client.chat.completions.create(
+                response = await client.chat.completions.create(  # CHANGED from acreate
                     model=llm_model,
                     messages=[
                         {
@@ -1000,11 +1095,9 @@ def create_info_file(
         f.write(f"Timestamp: {datetime.datetime.now().isoformat()}\n\n")
         f.write(f"LLM Improvement Success: {llm_success}\n")
         f.write(f"LLM Optimization Level: {optimization_level}\n")
-        f.write(f"Categories Attempted: {', '.join(categories)}\n\n")
+        f.write(f"Categories Attempted: {', '.join(file_status.get('categories_attempted',[])) or 'None'}\n\n")
 
         f.write("Changes Made:\n")
-
-        # Use file_status for more accurate change reporting
         if file_status:
             if file_status["changed"]:
                 f.write("* File was modified.\n")
@@ -1012,9 +1105,8 @@ def create_info_file(
                 f.write("* No changes were made to the file.\n")
             if file_status["restored"]:
                 f.write("* File was restored from backup.\n")
-            f.write(f"* Categories Attempted: {', '.join(file_status['categories_attempted'])}\n")
-            f.write(f"* Categories Skipped: {', '.join(file_status['categories_skipped'])}\n")
-
+            f.write(f"* Categories Attempted: {', '.join(file_status['categories_attempted']) or 'None'}\n")
+            f.write(f"* Categories Skipped: {', '.join(file_status['categories_skipped']) or 'None'}\n")
 
         f.write("\nStatic Analysis Results:\n")
         table_buffer = StringIO()
@@ -1057,10 +1149,10 @@ def create_info_file(
         else:
             f.write("  No tests performed.\n")
 
-        if llm_success:
-            f.write("\nLLM Improvements Summary:\n")
-            if llm_improvements_summary is None:
-                llm_improvements_summary = {}
+        f.write("\nLLM Improvements Summary:\n")
+        if not llm_improvements_summary or all(not improvements for improvements in llm_improvements_summary.values()):
+            f.write("- No LLM modifications were attempted because no issues were detected.\n")
+        else:
             for category, improvements in llm_improvements_summary.items():
                 f.write(f"\nCategory: {category}\n")
                 if improvements and improvements != [
@@ -1352,7 +1444,7 @@ def main(
 
         # Initialize the OpenAI client *outside* the conditional.
         #  We'll set api_key and api_base later.
-        client = OpenAI()
+        client = AsyncOpenAI()
 
         if api_base:
             client.base_url = api_base.rstrip('/')  # Use base_url, and remove trailing slash
@@ -1363,7 +1455,7 @@ def main(
 
         # Initialize the OpenAI client *outside* the conditional.
         #  We'll set api_key and api_base later.
-        client = OpenAI()
+        client = AsyncOpenAI()
 
         if api_base:
             client.base_url = api_base.rstrip('/')  # Use base_url, and remove trailing slash
