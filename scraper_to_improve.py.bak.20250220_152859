@@ -1,4 +1,5 @@
-"""GitHub Python Repo Scraper module."""
+"""GitHub Python Repo Scraper (to improve) module."""
+
 # Standard library imports
 import argparse
 import base64
@@ -14,7 +15,8 @@ from datetime import datetime, timedelta
 # Third-party imports
 import requests
 from rich.console import Console
-from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn
+from rich.progress import (BarColumn, Progress, TextColumn, TimeElapsedColumn,
+                           TimeRemainingColumn)
 
 # Initialize Rich console
 console = Console()
@@ -47,7 +49,7 @@ def make_github_request(url, headers, params=None, method="GET", data=None):
             elif method == "POST":
                 response = requests.post(url, headers=headers, data=data)
             else:
-                raise ValueError(f"Unsupported HTTP method: {method}")
+                raise ValueError("Unsupported HTTP method: %s" % method)
 
             response.raise_for_status()
             return response.json()
@@ -55,17 +57,26 @@ def make_github_request(url, headers, params=None, method="GET", data=None):
         except requests.exceptions.RequestException as e:
             if attempt == MAX_RETRIES - 1:
                 logging.error(
-                    f"Failed to make request to {url} after {MAX_RETRIES} attempts: {e}"
+                    "Failed to make request to %s after %d attempts: %s",
+                    url,
+                    MAX_RETRIES,
+                    e,
                 )
                 raise GitHubAPIError(
-                    f"Failed to make request to {url} after {MAX_RETRIES} attempts: {e}"
+                    "Failed to make request to %s after %d attempts: %s"
+                    % (url, MAX_RETRIES, e)
                 ) from e
             wait_time = RETRY_DELAY * (2**attempt)
             console.print(
-                f"[yellow]Request failed: {e}. Retrying in {wait_time} seconds... (Attempt {attempt + 1}/{MAX_RETRIES})[/yellow]"
+                "[yellow]Request failed: %s. Retrying in %s seconds... (Attempt %d/%d)[/yellow]"
+                % (e, wait_time, attempt + 1, MAX_RETRIES)
             )
             logging.warning(
-                f"Request failed: {e}. Retrying in {wait_time} seconds... (Attempt {attempt + 1}/{MAX_RETRIES})"
+                "Request failed: %s. Retrying in %s seconds... (Attempt %d/%d)",
+                e,
+                wait_time,
+                attempt + 1,
+                MAX_RETRIES,
             )
             time.sleep(wait_time)
 
@@ -79,9 +90,7 @@ def get_rate_limit_status(token):
         "User-Agent": "GitHub-Repo-Scraper/1.0",
     }
     try:
-        data = make_github_request(
-            f"{GITHUB_API_URL}/rate_limit", headers=headers
-        )
+        data = make_github_request("%s/rate_limit" % GITHUB_API_URL, headers)
         if data:
             return {
                 "core": {
@@ -94,14 +103,14 @@ def get_rate_limit_status(token):
                 },
             }
     except GitHubAPIError as e:
-        console.print(f"[red]Error getting rate limit status: {e}[/red]")
-        logging.error(f"Error getting rate limit status: {e}")
+        console.print("[red]Error getting rate limit status: %s[/red]" % e)
+        logging.error("Error getting rate limit status: %s", e)
         return None
     except Exception as e:
         console.print(
-            f"[red]Unexpected error getting rate limit status: {e}[/red]"
+            "[red]Unexpected error getting rate limit status: %s[/red]" % e
         )
-        logging.exception(f"Unexpected error getting rate limit status: {e}")
+        logging.exception("Unexpected error getting rate limit status: %s", e)
         return None
 
 
@@ -137,10 +146,12 @@ def search_repositories(token, max_repos, start_date, end_date):
                 wait_time = (reset_time - datetime.now()).total_seconds() + 1
                 wait_time = max(0, wait_time)
                 console.print(
-                    f"[yellow]Search rate limit low. Waiting until {reset_time.strftime('%Y-%m-%d %H:%M:%S')} ({wait_time:.0f} seconds)[/yellow]"
+                    f"[yellow]Search rate limit low. Waiting until "
+                    f"{reset_time.strftime('%Y-%m-%d %H:%M:%S')} ({wait_time:.0f} seconds)[/yellow]"
                 )
                 logging.warning(
-                    f"Search rate limit low. Waiting until {reset_time.strftime('%Y-%m-%d %H:%M:%S')} ({wait_time:.0f} seconds)"
+                    f"Search rate limit low. Waiting until "
+                    f"{reset_time.strftime('%Y-%m-%d %H:%M:%S')} ({wait_time:.0f} seconds)"
                 )
                 progress.stop()
                 time.sleep(wait_time)
@@ -192,8 +203,9 @@ def get_file_content_and_stats(token, repo_full_name, file_path):
     }
     try:
         file_data = make_github_request(
-            f"{GITHUB_API_URL}/repos/{repo_full_name}/contents/{file_path}",
-            headers=headers,
+            "%s/repos/%s/contents/%s"
+            % (GITHUB_API_URL, repo_full_name, file_path),
+            headers,
         )
 
         if "content" in file_data:
@@ -213,13 +225,16 @@ def get_file_content_and_stats(token, repo_full_name, file_path):
 
             code_lines = num_lines - comment_lines
             comment_ratio = (
-                (comment_lines / code_lines) * 100 if code_lines > 0 else 0.0
+                comment_lines / code_lines * 100 if code_lines > 0 else 0.0
             )
             return decoded_content, num_lines, comment_ratio
 
     except GitHubAPIError as e:
         logging.error(
-            f"Error getting file stats for {repo_full_name}/{file_path}: {e}"
+            "Error getting file stats for %s/%s: %s",
+            repo_full_name,
+            file_path,
+            e,
         )
         return "", 0, 0.0
 
@@ -249,20 +264,22 @@ def find_python_files(
         repo_info = None  # Initialize to None
         try:
             repo_info = make_github_request(
-                f"{GITHUB_API_URL}/repos/{repo_full_name}", headers=headers
+                "%s/repos/%s" % (GITHUB_API_URL, repo_full_name), headers
             )
         except GitHubAPIError as e:
             logging.error(
-                f"Failed to fetch repository info for {repo_full_name}: {e}"
+                "Failed to fetch repository info for %s: %s", repo_full_name, e
             )
-            return []  # Exit early if we can't even get repo info
+            return []  # Exit early if we can\'t even get repo info
 
         if (
             not isinstance(repo_info, dict)
             or "default_branch" not in repo_info
         ):
             logging.warning(
-                f"Repository info for {repo_full_name} is invalid or missing 'default_branch'.  Repo info: {repo_info}"
+                "Repository info for %s is invalid or missing 'default_branch'.  Repo info: %s",
+                repo_full_name,
+                repo_info,
             )
             return []  # Exit if repo_info is invalid
 
@@ -295,7 +312,7 @@ def find_python_files(
                     results.append((item["path"], num_lines, comment_ratio))
 
     except GitHubAPIError as e:
-        logging.error(f"Error during file search in {repo_full_name}: {e}")
+        logging.error("Error during file search in %s: %s", repo_full_name, e)
     return results
 
 
@@ -313,7 +330,10 @@ def create_unique_filename(
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     start_date_str = start_date.replace("-", "")
     end_date_str = end_date.replace("-", "")
-    return f"{timestamp}-{max_repos}repos-Min{min_lines}-Max{max_lines}-Quality{quality_threshold}-{start_date_str}-{end_date_str}.{extension}"
+    return (
+        f"{timestamp}-{max_repos}repos-Min{min_lines}-Max{max_lines}"
+        f"-Quality{quality_threshold}-{start_date_str}-{end_date_str}.{extension}"
+    )
 
 
 def load_existing_data(directory):
@@ -335,7 +355,7 @@ def load_existing_data(directory):
                 console.print(
                     f"[yellow]Warning: Could not read {filename}: {e}[/yellow]"
                 )
-                logging.warning(f"Could not read {filename}: {e}")
+                logging.warning("Could not read %s: %s", filename, e)
     return existing_data
 
 
@@ -483,7 +503,11 @@ def main():
             return
 
         console.print(
-            f"[green]Initial Rate Limit Status: Core Remaining: {rate_limit_status['core']['remaining']}, Search Remaining: {rate_limit_status['search']['remaining']}[/green]"
+            "[green]Initial Rate Limit Status: Core Remaining: %s, Search Remaining: %s[/green]"
+            % (
+                rate_limit_status["core"]["remaining"],
+                rate_limit_status["search"]["remaining"],
+            )
         )
 
         if rate_limit_status["core"]["remaining"] == 0:
@@ -493,17 +517,21 @@ def main():
             wait_time = (reset_time - datetime.now()).total_seconds() + 1
             wait_time = max(0, wait_time)
             console.print(
-                f"[yellow]Core rate limit is 0. Waiting until {reset_time.strftime('%Y-%m-%d %H:%M:%S')} ({wait_time:.0f} seconds)[/yellow]"
+                "[yellow]Core rate limit is 0. Waiting until %s (%s seconds)[/yellow]"
+                % (reset_time.strftime("%Y-%m-%d %H:%M:%S"), wait_time)
             )
             time.sleep(wait_time)
-            # Get the rate limit status again after waiting
             rate_limit_status = get_rate_limit_status(token)
             console.print(
-                f"[green]Rate Limit Status After Waiting: Core Remaining: {rate_limit_status['core']['remaining']}, Search Remaining: {rate_limit_status['search']['remaining']}[/green]"
+                "[green]Rate Limit Status After Waiting: Core Remaining: %s, Search Remaining: %s[/green]"
+                % (
+                    rate_limit_status["core"]["remaining"],
+                    rate_limit_status["search"]["remaining"],
+                )
             )
 
     except Exception as e:
-        print(f"Error during initial rate limit check: {e}")
+        print("Error during initial rate limit check: %s" % e)
         return
     # --- END ADDED RATE LIMIT CHECK ---
 
@@ -556,9 +584,9 @@ def main():
                     total_skipped += skipped_count
                 except Exception as e:
                     console.print(
-                        f"[red]Error processing a repository: {e}[/red]"
+                        "[red]Error processing a repository: %s[/red]" % e
                     )
-                    logging.exception(f"Error processing a repository: {e}")
+                    logging.exception("Error processing a repository: %s", e)
 
     console.print(f"[cyan]{len(all_results)} Items added to JSON[/cyan]")
     console.print(
