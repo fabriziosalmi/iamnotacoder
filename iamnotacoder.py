@@ -286,53 +286,40 @@ def _create_analysis_table(
             status = "[green]Passed[/green]"
             error_summary = "-"
         else:
+            # Default error display; may be refined below
             status = "[red]Issues[/red]"
-            if tool == "pylint":
-                issue_codes = re.findall(r"([A-Z]\d{4})", output)
-                error_count = len(issue_codes)
-                if analysis_verbose:
-                    error_summary = errors
-                else:
+            error_summary = errors
+            if tool in ["pylint", "flake8"]:
+                # In non-verbose mode, extract top error codes and file:line hints
+                if not analysis_verbose:
+                    # find error codes (e.g., C0301) and file:line references (e.g., filename.py:23)
+                    codes = re.findall(r"([A-Z]\d{3,4})", output)
+                    locations = re.findall(r"(\S+:\d+)", output)
+                    unique_locations = list(set(locations))
                     top_codes = ", ".join(
-                        code for code, _ in Counter(issue_codes).most_common(3)
+                        code for code, _ in Counter(codes).most_common(3)
                     )
-                    error_summary = (
-                        f"{error_count} ({top_codes})" if error_count > 0 else "-"
-                    )
-            elif tool == "flake8":
-                error_codes = re.findall(r"([A-Z]\d{3})", output)
-                error_count = len(error_codes)
-                if analysis_verbose:
-                    error_summary = errors
-                else:
-                    top_codes = ", ".join(
-                        code for code, _ in Counter(error_codes).most_common(3)
-                    )
-                    error_summary = (
-                        f"{error_count} ({top_codes})" if error_count > 0 else "-"
-                    )
+                    loc_summary = f" at {', '.join(unique_locations[:3])}" if unique_locations else ""
+                    error_summary = f"{len(codes)} ({top_codes}){loc_summary}" if codes else "-"
             elif tool == "black":
+                # Mark purely as informational reformat suggestions.
                 if "would reformat" in output:
-                    status = "[yellow]Would reformat[/yellow]"
-                    error_summary = "1 file"
-                else:
-                    error_summary = errors
+                    status = "[blue]Reformat suggested[/blue]"
+                    error_summary = "Reformat changes suggested."
             elif tool == "isort":
                 if "ERROR:" in output:
-                    status = "[yellow]Would reformat[/yellow]"
-                    error_summary = str(output.count("ERROR:"))
-                else:
-                    error_summary = errors
+                    status = "[blue]Reformat suggested[/blue]"
+                    error_summary = f"{output.count('ERROR:')} issues found."
             elif tool == "mypy":
-                error_count = output.count("error:")
-                if analysis_verbose:
-                    error_summary = errors
+                # For mypy, extract error summaries with file:line hints.
+                if not analysis_verbose:
+                    locations = re.findall(r"(\S+:\d+)", output)
+                    unique_locations = list(set(locations))
+                    error_count = output.count("error:")
+                    loc_summary = f" at {', '.join(unique_locations[:3])}" if unique_locations else ""
+                    error_summary = f"{error_count}{loc_summary}" if error_count > 0 else "-"
                 else:
-                    error_summary = (
-                        str(error_count) if error_count > 0 else "-"
-                    )
-            else:
-                error_summary = errors if analysis_verbose else "-"
+                    error_summary = errors
 
         table.add_row(tool, status, error_summary)
     return table
@@ -578,22 +565,23 @@ async def apply_llm_improvements(
     """Applies LLM improvements, handling retries, and tracking per-category attempts."""
     total_success = True
     improvements_by_category = {}
-    retry_counts: Dict[str, int] = {category: 0 for category in categories} # Track retries
+    retry_counts: Dict[str, int] = {category: 0 for category in categories}  # Track retries
 
     with open(file_path, "r", encoding="utf-8") as f:
         source_code = f.read()
 
     tree = ast.parse(source_code)
     updated_code = source_code
+    progress_amount = 1 / len(categories)  # calculate fixed advance amount
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)):
-             code_snippet = ast.get_source_segment(source_code, node)
-             if code_snippet is None:
+            code_snippet = ast.get_source_segment(source_code, node)
+            if code_snippet is None:
                 continue  # Skip if source segment not found
-             start_line = node.lineno
-             end_line = node.end_lineno
+            start_line = node.lineno
+            end_line = node.end_lineno
 
-             for category in categories:
+            for category in categories:
                 relevant_errors = False
                 if analysis_results:
                     for tool_results in analysis_results.values():
@@ -609,11 +597,12 @@ async def apply_llm_improvements(
                             break
                 if not relevant_errors and category not in ["general", "tests"]:
                     logging.info(f"Skipping LLM call for {category} due to no relevant errors.")
-                    progress.update(improve_task_id, advance=1/len(categories), fields={"status": "Skipped"})
+                    progress.advance(improve_task_id, progress_amount)
                     continue
 
                 improved_snippet, attempts = await _process_category_improvement(
-                    category, code_snippet, start_line, end_line, config, custom_prompt_dir, client, llm_model, llm_temperature, debug, progress, improve_task_id
+                    category, code_snippet, start_line, end_line, config, custom_prompt_dir,
+                    client, llm_model, llm_temperature, debug, progress, improve_task_id
                 )
                 retry_counts[category] = attempts
                 if improved_snippet:
@@ -623,7 +612,7 @@ async def apply_llm_improvements(
                     improvements_by_category[category] = improved_snippet
                 else:
                     total_success = False
-                progress.update(improve_task_id, advance=1/len(categories))
+                progress.advance(improve_task_id, progress_amount)
     return updated_code, total_success, retry_counts
 
 
@@ -1358,6 +1347,17 @@ def main(
         api_base = config_values.get(
             "openai_api_base", openai_api_base or os.getenv("OPENAI_API_BASE")
         )
+        api_key = config_values.get("openai_api_key", os.getenv("OPENAI_API_KEY"))
+        api_key_valid = api_key and api_key.strip() and api_key.lower() != "none"
+
+        # Initialize the OpenAI client *outside* the conditional.
+        #  We'll set api_key and api_base later.
+        client = OpenAI()
+
+        if api_base:
+            client.base_url = api_base.rstrip('/')  # Use base_url, and remove trailing slash
+            "openai_api_base", openai_api_base or os.getenv("OPENAI_API_BASE")
+        
         api_key = config_values.get("openai_api_key", os.getenv("OPENAI_API_KEY"))
         api_key_valid = api_key and api_key.strip() and api_key.lower() != "none"
 
