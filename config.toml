@@ -8,7 +8,7 @@
 [general]
 openai_api_key = "none"  # OpenAI API key. Use "none" for local LLMs.
 openai_api_base = "http://localhost:1234/v1"  # API endpoint (LM Studio, etc.).
-llm_model = "qwen2.5-coder-7b-instruct-mlx"  # LLM model name.
+llm_model = "qwen2.5-coder-3b-instruct-mlx"  # LLM model name.
 llm_temperature = 0.2  # Lower values are more deterministic (0.0 - 2.0).
 llm_optimization_level = "balanced"  # "fast", "balanced", "thorough" (future use).
 llm_custom_prompt = "."  # Path to custom prompt directory (prompt_*.txt).
