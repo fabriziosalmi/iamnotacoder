@@ -1448,19 +1448,7 @@ def main(
 
         if api_base:
             client.base_url = api_base.rstrip('/')  # Use base_url, and remove trailing slash
-            "openai_api_base", openai_api_base or os.getenv("OPENAI_API_BASE")
-        
-        api_key = config_values.get("openai_api_key", os.getenv("OPENAI_API_KEY"))
-        api_key_valid = api_key and api_key.strip() and api_key.lower() != "none"
-
-        # Initialize the OpenAI client *outside* the conditional.
-        #  We'll set api_key and api_base later.
-        client = AsyncOpenAI()
-
-        if api_base:
-            client.base_url = api_base.rstrip('/')  # Use base_url, and remove trailing slash
             logging.info(f"Using OpenAI API base: {client.base_url}")
-        # No else:  If no api_base, it defaults to the OpenAI default.
 
         if api_key and api_key.strip() and api_key.lower() != "none":
             client.api_key = api_key
@@ -1569,6 +1557,12 @@ def main(
 
 
         for file in files_list:
+            # Check if we've reached the maximum files limit
+            max_files_per_pr = config_values.get("commit_pr", {}).get("max_files_per_pr", 0)
+            if max_files_per_pr > 0 and len(improved_files_info) >= max_files_per_pr:
+                logging.info(f"Reached maximum files limit ({max_files_per_pr}). Skipping remaining files.")
+                break
+                
             file_path = os.path.join(temp_dir, file) if repo else os.path.abspath(file)
             if not os.path.exists(file_path):
                 logging.error(f"File not found: {file_path}. Skipping.")
