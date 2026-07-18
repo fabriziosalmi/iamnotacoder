@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.progress import Progress
 from openai import OpenAI, types  # Import types
 import subprocess
+import asyncio  # run_command/clone_repository/checkout_branch/fix_tests_syntax_error are async
 
 
 
@@ -67,11 +68,14 @@ from iamnotacoder import (
 
 @pytest.mark.parametrize("command, expected_code, expected_stdout, expected_stderr_contains", [
     (["echo", "test"], 0, "test", ""),
-    (["nonexistentcommand"], 1, "", "no such file"),  # Corrected expected code and stderr
+    # run_command returns 127 (the conventional "command not found" exit code) when
+    # the executable does not exist -- see run_command_async's FileNotFoundError branch.
+    (["nonexistentcommand"], 127, "", "no such file"),
 ])
 def test_run_command(command, expected_code, expected_stdout, expected_stderr_contains):
     """Test command execution with various scenarios."""
-    stdout, stderr, code = run_command(command)
+    # run_command is async (aliased to run_command_async); drive it with asyncio.run.
+    stdout, stderr, code = asyncio.run(run_command(command))
     assert code == expected_code
     assert expected_stdout in stdout
     if expected_stderr_contains:
@@ -81,15 +85,18 @@ def test_run_command(command, expected_code, expected_stdout, expected_stderr_co
     ('[test]\nkey = "value"', "test.key", "value"), # Corrected key
     ('[section1]\nkey1 = "val1"\n[section2]\nkey2 = "val2"', "section1.key1", "val1") # Corrected key
 ])
-def test_load_config_success(config_data, expected_key, expected_value):
+def test_load_config_success(config_data, expected_key, expected_value, tmp_path):
     """Test successful config loading with different configurations."""
-    with patch("builtins.open", mock_open(read_data=config_data)):
-        config = load_config("test.toml")
-        if '.' in expected_key:
-            section, key = expected_key.split('.')
-            assert config[section][key] == expected_value
-        else:
-            assert config[expected_key] == expected_value
+    # load_config parses a real TOML file via toml.load(path); write one to a temp
+    # path instead of mocking builtins.open (which toml bypasses through io.open).
+    config_file = tmp_path / "test.toml"
+    config_file.write_text(config_data)
+    config = load_config(str(config_file))
+    if '.' in expected_key:
+        section, key = expected_key.split('.')
+        assert config[section][key] == expected_value
+    else:
+        assert config[expected_key] == expected_value
 
 
 def test_load_config_file_not_found():
@@ -130,14 +137,14 @@ def test_clone_repository_success(mock_repo):
     """Test successful repository cloning."""
     with patch('git.Repo.clone_from', return_value=mock_repo), \
          patch('tempfile.mkdtemp', return_value='/tmp/test_repo'):
-        repo, temp_dir = clone_repository("https://github.com/test/repo", "token")
+        repo, temp_dir = asyncio.run(clone_repository("https://github.com/test/repo", "token"))
         assert repo == mock_repo
         assert temp_dir == '/tmp/test_repo'
         git.Repo.clone_from.assert_called_once() # Check that it has been called at least once
 
 def test_checkout_branch_success(mock_repo):
     """Test successful branch checkout."""
-    checkout_branch(mock_repo, "main")
+    asyncio.run(checkout_branch(mock_repo, "main"))
     mock_repo.git.fetch.assert_called_once_with("--all", "--prune")
     mock_repo.git.checkout.assert_called_once_with("main")
 
@@ -191,7 +198,7 @@ def test_push_branch_with_retry(mock_repo, force_push):
 
 def test_fix_tests_syntax_error_no_error(mock_openai):
     correct_code = "def test_func():\n    pass"
-    fixed, flag = fix_tests_syntax_error(correct_code, "dummy", mock_openai, "model", 0.2)
+    fixed, flag = asyncio.run(fix_tests_syntax_error(correct_code, "dummy", mock_openai, "model", 0.2))
     assert fixed == correct_code
     assert flag is False
 

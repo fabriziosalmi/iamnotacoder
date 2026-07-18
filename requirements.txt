@@ -1,8 +1,14 @@
-openai>=1.0.0  # Use a recent version, at least 1.0.0
-gitpython
-tomli  # For TOML parsing (toml is deprecated)
-click
-requests  # Explicitly include requests, as it's used by openai
-rich
-python-github  # For the GitHub API:
-toml
+# Runtime dependencies for iamnotacoder.
+# Refreshed 2026-07: added aiohttp + aiofiles (required by the async runtime in
+# iamnotacoder.py), corrected the GitHub client to PyGithub (which provides
+# `from github import Github`), and dropped the unused tomli entry.
+# Version floors are current-era and compatible with Python 3.10 (used in CI).
+openai>=1.40
+GitPython>=3.1.40
+click>=8.1
+requests>=2.31
+rich>=13.7
+toml>=0.10.2
+PyGithub>=2.3
+aiohttp>=3.9
+aiofiles>=23.2
