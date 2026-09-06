@@ -76,10 +76,55 @@ def restore_backup(file_path: str, backup_path: str) -> None:
         logging.exception(f"Restore backup failure for {file_path} from {backup_path}: {e}")
 
 # Callback to prioritize CLI config.
+# Keys whose value is a mapping consumed as a mapping, rather than a section of
+# settings. These are left nested.
+NESTED_CONFIG_KEYS = {"prompts"}
+
+
+def flatten_config(config: dict) -> dict:
+    """
+    Lifts the settings inside `[section]` tables to the top level.
+
+    Click matches `default_map` against parameter names at the top level only,
+    so a sectioned file produced a map whose keys were `general`,
+    `static_analysis` and the rest. None of those is a parameter name, so every
+    setting in the shipped config.toml was silently ignored and the built-in
+    defaults applied.
+
+    Sections are kept alongside the lifted keys, so code that reads
+    `config["commit_pr"]["max_files_per_pr"]` keeps working, and both the
+    sectioned file and the flat form shown in the README are accepted.
+
+    Args:
+        config: The parsed TOML document.
+
+    Returns:
+        A mapping with section contents lifted to the top level.
+    """
+    flat = {
+        key: value for key, value in config.items()
+        if not isinstance(value, dict) or key in NESTED_CONFIG_KEYS
+    }
+
+    for section, values in config.items():
+        if not isinstance(values, dict) or section in NESTED_CONFIG_KEYS:
+            continue
+        for key, value in values.items():
+            if key in flat and flat[key] != value:
+                logging.warning(
+                    f"Configuration key '{key}' is set both at the top level and in "
+                    f"[{section}]; using the value from [{section}]."
+                )
+            flat[key] = value
+        flat[section] = values
+
+    return flat
+
+
 def get_cli_config_priority(ctx, param, value) -> dict:
     config = ctx.default_map or {}
     if value:
-        config.update(load_config(value))
+        config.update(flatten_config(load_config(value)))
     config.update({k: v for k, v in ctx.params.items() if v is not None})
     ctx.default_map = config
     return config
