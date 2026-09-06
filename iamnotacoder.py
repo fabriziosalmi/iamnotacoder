@@ -49,6 +49,7 @@ from helpers import (
     create_backup,
     restore_backup,
     get_cli_config_priority,
+    flatten_config,
     validate_python_syntax,
     extract_code_from_response,
     format_llm_summary,
@@ -1558,7 +1559,12 @@ def main(
 
         for file in files_list:
             # Check if we've reached the maximum files limit
-            max_files_per_pr = config_values.get("commit_pr", {}).get("max_files_per_pr", 0)
+            # Accepts both shapes: the key lifted out of [commit_pr], and the
+            # section itself for a configuration read another way.
+            max_files_per_pr = config_values.get(
+                "max_files_per_pr",
+                config_values.get("commit_pr", {}).get("max_files_per_pr", 0),
+            )
             if max_files_per_pr > 0 and len(improved_files_info) >= max_files_per_pr:
                 logging.info(f"Reached maximum files limit ({max_files_per_pr}). Skipping remaining files.")
                 break

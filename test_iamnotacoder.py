@@ -2,6 +2,7 @@ import pytest
 import os
 import tempfile
 import shutil
+import logging
 import toml
 from datetime import datetime
 from unittest.mock import patch, MagicMock, mock_open
@@ -61,7 +62,8 @@ from iamnotacoder import (
     push_branch_with_retry,
     fix_tests_syntax_error,
     format_commit_and_pr_content,
-    get_cli_config_priority
+    get_cli_config_priority,
+    flatten_config,
 )
 
 # --- Test Cases ---
@@ -225,6 +227,81 @@ def test_get_cli_config_priority():
     # Calling function should update context default_map with params
     result = get_cli_config_priority(ctx, dummy_param, dummy_value)
     assert result.get("key") == "value"
+
+
+# --- Section flattening -------------------------------------------------------
+#
+# Click matches default_map against parameter names at the top level only, so
+# the shipped sectioned config.toml produced a map keyed on `general`,
+# `static_analysis` and the rest, none of which is a parameter name. Every
+# setting in the file was silently ignored.
+
+def test_flatten_config_lifts_section_settings_to_the_top_level():
+    flat = flatten_config({
+        "general": {"llm_model": "qwen3-4b", "llm_temperature": 0.2},
+        "testing": {"min_coverage": 80},
+    })
+    assert flat["llm_model"] == "qwen3-4b"
+    assert flat["llm_temperature"] == 0.2
+    assert flat["min_coverage"] == 80
+
+
+def test_flatten_config_keeps_the_sections_as_well():
+    """Readers that index the section by name keep working."""
+    flat = flatten_config({"commit_pr": {"max_files_per_pr": 3}})
+    assert flat["max_files_per_pr"] == 3
+    assert flat["commit_pr"]["max_files_per_pr"] == 3
+
+
+def test_flatten_config_accepts_a_flat_file():
+    """The form the README documents passes through unchanged."""
+    flat = flatten_config({"llm_model": "qwen3-4b", "min_coverage": 80})
+    assert flat == {"llm_model": "qwen3-4b", "min_coverage": 80}
+
+
+def test_flatten_config_leaves_prompts_nested():
+    """`prompts` is consumed as a mapping of category to text, not as settings."""
+    flat = flatten_config({"prompts": {"security": "some prompt text"}})
+    assert flat["prompts"] == {"security": "some prompt text"}
+    assert "security" not in flat
+
+
+def test_flatten_config_warns_on_a_collision(caplog):
+    with caplog.at_level(logging.WARNING):
+        flat = flatten_config({"llm_model": "from-top", "general": {"llm_model": "from-section"}})
+    assert flat["llm_model"] == "from-section"
+    assert "llm_model" in caplog.text
+
+
+def test_shipped_config_reaches_click_parameters():
+    """
+    The end of the chain: every setting in the repository's own config.toml
+    should land on a key Click can match, which is what was not happening.
+    """
+    config = load_config("config.toml")
+    flat = flatten_config(config)
+    for key in ("llm_model", "llm_temperature", "min_coverage", "tools", "categories"):
+        assert key in flat, f"{key} did not reach the top level"
+
+
+def test_cli_config_priority_flattens_and_cli_still_wins(tmp_path):
+    config_file = tmp_path / "config.toml"
+    config_file.write_text('[general]\nllm_model = "from-file"\nllm_temperature = 0.2\n')
+
+    class DummyContext:
+        def __init__(self, params):
+            self.default_map = {}
+            self.params = params
+
+    ctx = DummyContext({})
+    result = get_cli_config_priority(ctx, None, str(config_file))
+    assert result["llm_model"] == "from-file"
+
+    ctx = DummyContext({"llm_model": "from-cli"})
+    result = get_cli_config_priority(ctx, None, str(config_file))
+    assert result["llm_model"] == "from-cli"
+    assert result["llm_temperature"] == 0.2
+
 
 if __name__ == '__main__':
     pytest.main(['-v'])

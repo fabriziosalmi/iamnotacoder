@@ -125,16 +125,22 @@ This README focuses primarily on `iamnotacoder.py` (the optimizer) and provides 
 python iamnotacoder.py --repo <repository_url> --files <file_paths> --branch <target_branch> --token <github_token> [options]
 ```
 
-**Required Arguments:**
+**Required Argument:**
+
+*   `--files` (`-f`): 📄 Comma-separated paths to the Python files you want to improve (e.g., `src/module1.py,src/module2.py`).
+
+**Required together, to work against a remote repository:**
+
+These are optional: without them the tool improves the files where they are, on
+your machine, and commits nothing.
 
 *   `--repo` (`-r`): 🐙 The URL of the GitHub repository (e.g., `https://github.com/user/repo`).
-*   `--files` (`-f`): 📄 Comma-separated paths to the Python files you want to improve (e.g., `src/module1.py,src/module2.py`).
 *   `--branch` (`-b`): 🌿 The target branch in the repository (e.g., `main`, `develop`).
 *   `--token` (`-t`): 🔑 Your GitHub Personal Access Token (PAT) with the `repo` scope.
 
 **Common Options:**
 
-*   `--config` (`-c`): ⚙️ Path to a TOML configuration file.
+*   `--config`: ⚙️ Path to a TOML configuration file. It has no short flag: `-c` is `--min-coverage`.
 *   `--tools` (`-T`): 🛠️ Comma-separated list of static analysis tools to use (default: `black,isort,pylint,flake8,mypy`).
 *   `--exclude-tools` (`-e`): ❌ Comma-separated list of tools to exclude.
 *   `--llm-model` (`-m`): 🧠 The LLM model to use (default: `qwen2.5-coder-14b-instruct-mlx`). Supports both OpenAI and local LLM models.
@@ -156,6 +162,11 @@ python iamnotacoder.py --repo <repository_url> --files <file_paths> --branch <ta
 
 ### Configuration File (`config.toml` - Example)
 
+Settings may be written flat, or grouped in `[section]` tables as the
+`config.toml` in this repository does. Both are read the same way: a section is
+an organisational device, and its settings are lifted to the top level when the
+file is loaded.
+
 ```toml
 openai_api_key = "none"  # Set to "none" when using a local LLM
 openai_api_base = "http://localhost:1234/v1"  # For LM Studio, if applicable
@@ -165,6 +176,27 @@ tools = "black,isort,pylint,flake8"
 min_coverage = 80
 coverage_fail_action = "warn"
 ```
+
+The same thing, grouped:
+
+```toml
+[general]
+openai_api_key = "none"
+openai_api_base = "http://localhost:1234/v1"
+llm_model = "qwen2.5-coder-14b-instruct-mlx"
+llm_temperature = 0.2
+
+[static_analysis]
+tools = "black,isort,pylint,flake8"
+
+[testing]
+min_coverage = 80
+coverage_fail_action = "warn"
+```
+
+A key name must match the long option it configures, with dashes written as
+underscores: `--llm-model` is `llm_model`. A command-line argument always wins
+over the file.
 
 ### Custom Prompts
 
@@ -196,7 +228,7 @@ Write test for {file_base_name}.py file:
 1.  **Basic Usage (with a configuration file):**
 
     ```bash
-    python iamnotacoder.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN -c config.toml
+    python iamnotacoder.py -r https://github.com/user/repo -f src/my_module.py -b main -t YOUR_GITHUB_TOKEN --config config.toml
     ```
 
 2.  **Dry Run with Debug Logging:**
